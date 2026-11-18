@@ -64,32 +64,35 @@ npm test
 
 ## 本番環境への公開（Firebase）
 
-1. [Firebase コンソール](https://console.firebase.google.com/)でプロジェクトを作成し、**Blaze プラン（従量課金）** にします。Cloud Functions を使うために必要です。このアプリの規模なら、ほぼ無料枠の範囲に収まります。念のため予算アラートを設定しておくと安心です。
-2. 次の3つを有効にします。
-   - Authentication の「メール/パスワード」
-   - Firestore（ロケーションは `asia-northeast1`）
-   - Hosting
-3. 「プロジェクトの設定」でウェブアプリを追加し、表示された設定値を `web/.env.production.local` に書きます（書き方は `web/.env.example` を参照）。
-4. `.firebaserc` の `default` を、作成したプロジェクトID に書き換えます。
-5. デプロイします。
+### 初回の準備（Firebase コンソール）
 
-   ```bash
-   npx firebase login
-   ```
+1. https://console.firebase.google.com/ でプロジェクトを作成（Google アナリティクスは不要）。
+2. 左下の料金プランを **Blaze（従量課金）** に変更（Cloud Functions に必要。この規模なら通常は無料枠内）。念のため予算アラートを設定する。
+3. 「Authentication」→「始める」→「メール/パスワード」を有効にする。
+4. 「Firestore Database」→「データベースを作成」→ ロケーション `asia-northeast1（東京）`、本番環境モードで作成。
+5. 「プロジェクトの設定」→「マイアプリ」→ ウェブアプリ（`</>`）を追加し、表示された `firebaseConfig` の値を `web/.env.production.local` に書く（`web/.env.example` をコピーして作る。このファイルは Git に入らない）。
 
-   ```bash
-   npm run deploy
-   ```
+### 公開（デプロイ）
 
-6. 最初のメンバーを作成します。2人目以降は、画面の「設定 > メンバー」から追加できます。
+```bash
+npx firebase login
+```
 
-   ```bash
-   gcloud auth application-default login
-   ```
+```bash
+npx firebase deploy --project <プロジェクトID>
+```
 
-   ```bash
-   npm run create-member -- --prod --project <プロジェクトID> you@example.com <パスワード> "表示名"
-   ```
+初回は数分かかります。完了すると `Hosting URL: https://<プロジェクトID>.web.app` が表示されます。
+
+### 最初のメンバーを登録
+
+1. Firebase コンソール「Authentication」→「ユーザーを追加」でメールアドレスとパスワードを登録し、表示された **ユーザー UID** をコピー。
+2. 「Firestore Database」→「コレクションを開始」→ コレクション ID `members`、ドキュメント ID に UID を貼り付け、フィールド `email`（文字列）にメールアドレスを入れて保存。
+3. 公開 URL を開いてログイン。2人目以降は画面の「設定 > メンバー」から追加できる。
+
+### 更新するとき
+
+コードを更新したら、もう一度 `npx firebase deploy --project <プロジェクトID>` を実行します。
 
 ## 決めごと
 
