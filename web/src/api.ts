@@ -4,7 +4,6 @@ import type {
   Entry,
   EntryInput,
   EntryKind,
-  Member,
   OnlineView,
   Settings,
   Summary,
@@ -13,7 +12,16 @@ import { functions, useEmulators } from "./firebase";
 
 export type * from "../../functions/src/domain/types";
 // 定数は functions と共有（types.ts は依存のない純粋なモジュール）
-export { CHANNELS, COUNTRIES, COUNTRY_LABELS, CURRENCY_LABELS, LICENSE_TYPES, OFFLINE_TYPES, currencyOf } from "../../functions/src/domain/types";
+export {
+  CHANNELS,
+  COUNTRIES,
+  COUNTRY_LABELS,
+  CURRENCY_LABELS,
+  LICENSE_TYPES,
+  OFFLINE_TYPES,
+  SHARED_LOGIN_EMAIL,
+  currencyOf,
+} from "../../functions/src/domain/types";
 
 type Req = { action: string; payload?: unknown };
 const call = useEmulators
@@ -54,8 +62,5 @@ export const Api = {
   getSettings: () => api<Settings>("getSettings"),
   saveSettings: (settings: Settings) => api<Settings>("saveSettings", { settings }),
 
-  listMembers: () => api<Member[]>("listMembers"),
-  createMember: (email: string, password: string, displayName: string) => api<Member>("createMember", { email, password, displayName }),
-  resetMemberPassword: (uid: string, password: string) => api<{ ok: true }>("resetMemberPassword", { uid, password }),
-  deleteMember: (uid: string) => api<{ ok: true }>("deleteMember", { uid }),
+  changePassword: (password: string) => api<{ ok: true }>("changePassword", { password }),
 };

@@ -1,6 +1,8 @@
-// 設定：期間・キャラクター候補・メンバー
-import { useCallback, useEffect, useState } from "react";
-import { Api, type Member, type Settings } from "../api";
+// 設定：期間・為替レート・キャラクター候補・共有パスワード
+import { useEffect, useState } from "react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { Api, SHARED_LOGIN_EMAIL, type Settings } from "../api";
+import { auth } from "../firebase";
 import { useAuth } from "../components/Auth";
 import { PageHeader } from "../components/PageHeader";
 import { useToast } from "../components/Toast";
@@ -78,7 +80,7 @@ export default function SettingsPage() {
           </button>
         </div>
       </form>
-      <MembersCard />
+      <PasswordCard />
     </div>
   );
 }
@@ -92,97 +94,52 @@ function LogoutButton() {
   );
 }
 
-function MembersCard() {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [form, setForm] = useState({ email: "", password: "", displayName: "" });
+function PasswordCard() {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
   const [busy, setBusy] = useState(false);
-  const { user } = useAuth();
   const toast = useToast();
 
-  const load = useCallback(() => {
-    Api.listMembers().then(setMembers).catch((e) => toast.error(e.message));
-  }, [toast]);
-  useEffect(load, [load]);
-
-  const wrap = async (fn: () => Promise<unknown>, msg: string) => {
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pw !== pw2) {
+      toast.error("確認用のパスワードが一致しません");
+      return;
+    }
     setBusy(true);
     try {
-      await fn();
-      toast.info(msg);
-      load();
-    } catch (e) {
-      toast.error((e as Error).message);
+      await Api.changePassword(pw);
+      // パスワードを変えると以前のログインが無効になるので、新しいパスワードで入り直す
+      await signInWithEmailAndPassword(auth, SHARED_LOGIN_EMAIL, pw);
+      setPw("");
+      setPw2("");
+      toast.info("パスワードを変更しました");
+    } catch (err) {
+      toast.error((err as Error).message);
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div className="card">
-      <h2>メンバー</h2>
-      <p className="hint">全員が同じ権限で閲覧・編集できます。</p>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>メールアドレス</th>
-            <th>表示名</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {members.map((m) => (
-            <tr key={m.uid}>
-              <td>{m.email}</td>
-              <td>{m.displayName}</td>
-              <td className="actions">
-                <button
-                  className="btn small"
-                  disabled={busy}
-                  onClick={() => {
-                    const pw = prompt(`${m.email} の新しいパスワード（8文字以上）`);
-                    if (pw) wrap(() => Api.resetMemberPassword(m.uid, pw), "パスワードを変更しました");
-                  }}
-                >
-                  パスワード変更
-                </button>
-                {m.uid !== user?.uid && (
-                  <button
-                    className="danger"
-                    disabled={busy}
-                    onClick={() => confirm(`${m.email} を削除しますか？`) && wrap(() => Api.deleteMember(m.uid), "削除しました")}
-                  >
-                    削除
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <form
-        className="inline-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          wrap(async () => {
-            await Api.createMember(form.email, form.password, form.displayName);
-            setForm({ email: "", password: "", displayName: "" });
-          }, "メンバーを追加しました");
-        }}
-      >
-        <input type="email" required placeholder="メールアドレス" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        <input placeholder="表示名" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
-        <input
-          type="password"
-          required
-          minLength={8}
-          placeholder="初期パスワード（8文字以上）"
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-        />
+    <form className="card" onSubmit={submit}>
+      <h2>ログインパスワード</h2>
+      <p className="hint">全員共通のパスワードです。変更すると、他の人の端末は新しいパスワードで入り直しになります。</p>
+      <div className="form-grid">
+        <label>
+          新しいパスワード（8文字以上）
+          <input type="password" autoComplete="new-password" minLength={8} required value={pw} onChange={(e) => setPw(e.target.value)} />
+        </label>
+        <label>
+          もう一度入力
+          <input type="password" autoComplete="new-password" minLength={8} required value={pw2} onChange={(e) => setPw2(e.target.value)} />
+        </label>
+      </div>
+      <div className="form-actions">
         <button type="submit" className="btn primary" disabled={busy}>
-          追加
+          変更する
         </button>
-      </form>
-    </div>
+      </div>
+    </form>
   );
 }

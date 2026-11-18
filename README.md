@@ -11,7 +11,7 @@
 | 3. 中国オンライン | 週ごとに小红书・淘宝の売上を元で入力。月をまたぐ週は木曜日のある月に入る |
 | 4. オフライン | 国・キャラクター・種別（POP UP／委託販売）・お店・イベント名・金額・計上月 |
 | 5. その他 | 国・案件内容・金額・計上月 |
-| 設定 | 期間、為替レート（1元＝○円）、キャラクター候補、メンバー（ログインできる人） |
+| 設定 | 期間、為替レート（1元＝○円）、キャラクター候補、ログインパスワードの変更 |
 
 2〜5ページ目で入力した金額は、計上月ごとに1ページ目の「売上」へ自動で反映されます。
 
@@ -22,7 +22,7 @@
 | 画面 | React + TypeScript + Vite |
 | サーバー（保存・集計） | Cloud Functions for Firebase（東京リージョン） |
 | データベース | Cloud Firestore（画面からの直接アクセスは禁止し、すべてサーバー経由） |
-| ログイン | Firebase Authentication（メール＋パスワード） |
+| ログイン | 全員共通のパスワードだけで入る（内部では Firebase Authentication の共有アカウント `login@sales.internal` を使い、サーバーはこのアカウント以外を拒否する） |
 | ホスティング | Firebase Hosting |
 
 ```
@@ -30,7 +30,7 @@ functions/src/domain/   集計・週の判定・CSV・入力チェック（集�
 functions/src/repo.ts   Firestore の読み書き（コレクション構成はファイル先頭に記載）
 functions/src/index.ts  API
 web/src/pages/          画面
-scripts/                サンプルデータ投入・メンバー作成
+scripts/                サンプルデータ投入・本番設定・公開
 ```
 
 ## ローカルで動かす
@@ -51,7 +51,7 @@ npm run dev
 npm run seed
 ```
 
-- 画面：http://localhost:5173 （ログイン：`demo@example.com` / `password123`）
+- 画面：http://localhost:5173 （ログインパスワード：`password123`）
 - エミュレータの管理画面：http://localhost:4100
 
 エミュレータのデータは `emulator-data/` に保存されるので、終了して再起動しても残ります（Ctrl+C で終了したとき）。
@@ -89,11 +89,11 @@ npm run deploy
 
 初回は数分かかります。完了すると `Hosting URL: https://<プロジェクトID>.web.app` が表示されます。
 
-### 最初のメンバーを登録
+### ログインパスワードを決める（初回のみ）
 
-1. Firebase コンソール「Authentication」→「ユーザーを追加」でメールアドレスとパスワードを登録し、表示された **ユーザー UID** をコピー。
-2. 「Firestore Database」→「コレクションを開始」→ コレクション ID `members`、ドキュメント ID に UID を貼り付け、フィールド `email`（文字列）にメールアドレスを入れて保存。
-3. 公開 URL を開いてログイン。2人目以降は画面の「設定 > メンバー」から追加できる。
+1. Firebase コンソール「Authentication」→「ユーザーを追加」を押す。
+2. メールアドレスに `login@sales.internal`（共有アカウント。メールは届かなくてよい）、パスワードに全員で使うパスワードを入れて「ユーザーを追加」。
+3. 公開 URL を開き、そのパスワードでログイン。以後のパスワード変更は画面の「設定」から行える。
 
 ### 更新するとき
 

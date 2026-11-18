@@ -3,12 +3,11 @@
 
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { buildOnline, buildSummary } from "./domain/aggregate";
 import { listMonths, listWeeks } from "./domain/period";
-import { CHANNELS, LINES, toCny, type Channel, type Entry, type Member } from "./domain/types";
+import { CHANNELS, LINES, SHARED_LOGIN_EMAIL, toCny, type Channel, type Entry } from "./domain/types";
 import * as V from "./domain/validate";
 import * as repo from "./repo";
 
@@ -101,42 +100,12 @@ const handlers: Record<string, Handler> = {
     return s;
   },
 
-  // ---- メンバー ----
-  listMembers: async () => {
-    const snap = await getFirestore().collection("members").get();
-    return snap.docs
-      .map((d) => ({ uid: d.id, email: d.data().email, displayName: d.data().displayName ?? "" }) as Member)
-      .sort((a, b) => a.email.localeCompare(b.email));
-  },
-
-  createMember: async (p, ctx) => {
-    const email = String(p.email ?? "").trim();
-    const password = String(p.password ?? "");
-    const displayName = String(p.displayName ?? "").trim();
-    if (!/^[^@\s]+@[^@\s]+$/.test(email)) throw new V.ValidationError("メールアドレスが不正です");
-    if (password.length < 8) throw new V.ValidationError("パスワードは8文字以上にしてください");
-    const user = await getAuth().createUser({ email, password, displayName: displayName || undefined });
-    await getFirestore().doc(`members/${user.uid}`).set({ email, displayName });
-    await repo.audit(ctx.uid, ctx.email, "createMember", { uid: user.uid, email });
-    return { uid: user.uid, email, displayName } satisfies Member;
-  },
-
-  resetMemberPassword: async (p, ctx) => {
+  // ---- 共有パスワード ----
+  changePassword: async (p, ctx) => {
     const password = String(p.password ?? "");
     if (password.length < 8) throw new V.ValidationError("パスワードは8文字以上にしてください");
-    await getAuth().updateUser(String(p.uid), { password });
-    await repo.audit(ctx.uid, ctx.email, "resetMemberPassword", { uid: p.uid });
-    return { ok: true };
-  },
-
-  deleteMember: async (p, ctx) => {
-    const uid = String(p.uid);
-    if (uid === ctx.uid) throw new V.ValidationError("自分自身は削除できません");
-    await getFirestore().doc(`members/${uid}`).delete();
-    await getAuth()
-      .deleteUser(uid)
-      .catch(() => undefined);
-    await repo.audit(ctx.uid, ctx.email, "deleteMember", { uid });
+    await getAuth().updateUser(ctx.uid, { password });
+    await repo.audit(ctx.uid, ctx.email, "changePassword", {});
     return { ok: true };
   },
 };
@@ -145,15 +114,14 @@ export const api = onCall(async (req: CallableRequest<{ action?: string; payload
   if (!req.auth) throw new HttpsError("unauthenticated", "ログインしてください");
   const action = req.data?.action ?? "";
   try {
-    if (!(await repo.isMember(req.auth.uid))) throw new HttpsError("permission-denied", "このアカウントには利用権限がありません");
+    // 共有アカウント以外は受け付けない（Firebase Auth で勝手に作られたアカウントを弾く）
+    if (req.auth.token.email !== SHARED_LOGIN_EMAIL) throw new HttpsError("permission-denied", "このアカウントには利用権限がありません");
     const handler = handlers[action];
     if (!handler) throw new HttpsError("invalid-argument", `不明な操作です: ${action}`);
     return await handler(req.data.payload ?? {}, { uid: req.auth.uid, email: req.auth.token.email });
   } catch (e) {
     if (e instanceof V.ValidationError) throw new HttpsError("invalid-argument", e.message);
     if (e instanceof HttpsError) throw e;
-    if ((e as { code?: string }).code === "auth/email-already-exists")
-      throw new HttpsError("already-exists", "このメールアドレスは登録済みです");
     // 権限不足（データベースを作っていない・サービスアカウントにロールが無い など）はログで分かるようにする
     console.error(`api action=${action} failed`, e);
     const grpc = (e as { code?: number }).code;

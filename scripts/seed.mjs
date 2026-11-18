@@ -1,6 +1,6 @@
 // ローカル動作確認用のサンプルデータを投入する（エミュレータ専用）。
 //   npm run seed
-// ログイン: demo@example.com / password123
+// ログイン: パスワード password123
 
 import { initAdmin } from "./lib.mjs";
 
@@ -10,14 +10,14 @@ if (prod) {
   process.exit(1);
 }
 
-const email = "demo@example.com";
-let user;
+// 共有ログインアカウント（画面ではパスワードだけを入力する）
+const email = "login@sales.internal";
 try {
-  user = await auth.getUserByEmail(email);
+  const u = await auth.getUserByEmail(email);
+  await auth.updateUser(u.uid, { password: "password123" });
 } catch {
-  user = await auth.createUser({ email, password: "password123", displayName: "デモユーザー" });
+  await auth.createUser({ email, password: "password123" });
 }
-await db.doc(`members/${user.uid}`).set({ email, displayName: "デモユーザー" });
 await db.doc("settings/app").set({
   startMonth: "2026-11",
   endMonth: "2027-12",
@@ -64,4 +64,4 @@ weeks.forEach((w, i) =>
 );
 await batch.commit();
 
-console.log("サンプルデータを投入しました。ログイン: demo@example.com / password123");
+console.log("サンプルデータを投入しました。ログインパスワード: password123");

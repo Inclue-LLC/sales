@@ -5,7 +5,6 @@
 // entries/{autoId}                … ライセンス／オフライン／その他の案件（kind で区別）
 // onlineWeekly/{weekStart}        … 中国オンラインの週次（チャネル別）
 // weeks/{weekStart}               … 計上月の手動変更（現在は画面から変更しない）
-// members/{uid}                   … 利用を許可したメンバー
 // auditLogs/{autoId}              … 変更履歴
 
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
@@ -119,10 +118,6 @@ export async function loadRaw(): Promise<RawData> {
   const weekOverrides: Record<string, string | null> = {};
   for (const d of weeksSnap.docs) weekOverrides[d.id] = d.data().bookingMonthOverride ?? null;
   return { settings, entries, targets, online, weekOverrides };
-}
-
-export async function isMember(uid: string): Promise<boolean> {
-  return (await db().doc(`members/${uid}`).get()).exists;
 }
 
 export async function audit(uid: string, email: string | undefined, action: string, detail: Record<string, unknown>) {

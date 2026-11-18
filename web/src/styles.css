@@ -854,3 +854,7 @@ table {
   color: var(--muted);
   font-weight: 400;
 }
+
+.spacer {
+  flex: 1;
+}

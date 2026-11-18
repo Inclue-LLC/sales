@@ -132,8 +132,8 @@ export interface Summary {
   rows: SummaryRow[];
 }
 
-export interface Member {
-  uid: string;
-  email: string;
-  displayName: string;
-}
+/**
+ * 共有ログイン用のアカウント。画面ではパスワードだけを入力し、内部ではこのメールアドレスでログインする。
+ * 実在しない（メールが届かない）アドレスで構わない。サーバーはこのアカウント以外を受け付けない。
+ */
+export const SHARED_LOGIN_EMAIL = "login@sales.internal";

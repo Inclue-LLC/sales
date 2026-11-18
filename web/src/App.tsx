@@ -31,7 +31,7 @@ function Shell() {
     return (
       <div className="login">
         <div className="card login-card">
-          <p>このアカウント（{user.email}）には利用権限がありません。</p>
+          <p>このアカウントでは利用できません。ログアウトして、共有パスワードで入り直してください。</p>
           <button onClick={logout}>ログアウト</button>
         </div>
       </div>
@@ -62,10 +62,8 @@ function Shell() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <div className="user" title={user.email ?? ""}>
-            <span className="avatar">{(user.email ?? "?").slice(0, 1).toUpperCase()}</span>
-            <span className="user-email">{user.email}</span>
-          </div>
+          <span className="user-email">ログイン中</span>
+          <div className="spacer" />
           <button className="icon-btn" onClick={logout} title="ログアウト" aria-label="ログアウト">
             <IconLogout />
           </button>
