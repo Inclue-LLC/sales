@@ -642,18 +642,15 @@ table {
 .weekly .input-cell {
   width: 180px;
 }
-.weekly .month-row th {
+.weekly .month-row th,
+.weekly .month-row td {
   background: var(--surface-2);
+  font-weight: 700;
   font-size: 14px;
   color: var(--text);
   padding-top: 12px;
   padding-bottom: 8px;
   scroll-margin-top: 8px;
-}
-.weekly .subtotal-row td {
-  background: #f1f3f7;
-  font-weight: 700;
-  font-size: 13px;
 }
 .month-select {
   width: auto;

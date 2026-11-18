@@ -41,7 +41,6 @@ export default function OnlinePage() {
   }, [data]);
 
   if (!data) return <div className="page loading">読み込み中…</div>;
-  const cols = 1 + CHANNELS.length + 1;
 
   return (
     <div className="page">
@@ -72,7 +71,13 @@ export default function OnlinePage() {
               {data.groups.map((g) => (
                 <Fragment key={g.month}>
                   <tr className="month-row" id={`month-${g.month}`}>
-                    <th colSpan={cols}>{monthLabel(g.month)}</th>
+                    <th>{monthLabel(g.month)}</th>
+                    {CHANNELS.map((c) => (
+                      <td key={c.key} className="num">
+                        {num(g.subtotal[c.key])}元
+                      </td>
+                    ))}
+                    <td className="num">{num(g.total)}元</td>
                   </tr>
                   {g.weeks.map((w) => (
                     <tr key={w.weekStart}>
@@ -92,15 +97,6 @@ export default function OnlinePage() {
                       <td className="num">{num(w.total)}元</td>
                     </tr>
                   ))}
-                  <tr className="subtotal-row">
-                    <td>{monthLabel(g.month)} 計</td>
-                    {CHANNELS.map((c) => (
-                      <td key={c.key} className="num">
-                        {num(g.subtotal[c.key])}元
-                      </td>
-                    ))}
-                    <td className="num">{num(g.total)}元</td>
-                  </tr>
                 </Fragment>
               ))}
             </tbody>
