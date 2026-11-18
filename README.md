@@ -52,7 +52,7 @@ npm run seed
 ```
 
 - 画面：http://localhost:5173 （ログイン：`demo@example.com` / `password123`）
-- エミュレータの管理画面：http://localhost:4000
+- エミュレータの管理画面：http://localhost:4100
 
 エミュレータのデータは `emulator-data/` に保存されるので、終了して再起動しても残ります（Ctrl+C で終了したとき）。
 

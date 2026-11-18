@@ -20,8 +20,8 @@ export function initAdmin(argv) {
   const rest = args.filter((a) => a !== "--prod");
 
   if (!prod) {
-    process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
-    process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9099";
+    process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8188";
+    process.env.FIREBASE_AUTH_EMULATOR_HOST ??= "127.0.0.1:9199";
     projectId ??= JSON.parse(readFileSync(new URL("../.firebaserc", import.meta.url), "utf8")).projects.default;
   } else if (!projectId) {
     console.error("本番に接続するときは --project <projectId> を指定してください");

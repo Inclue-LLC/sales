@@ -3,8 +3,15 @@
     {
       "source": "functions",
       "codebase": "default",
-      "ignore": ["node_modules", ".git", "test", "*.log"],
-      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
+      "ignore": [
+        "node_modules",
+        ".git",
+        "test",
+        "*.log"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
     }
   ],
   "firestore": {
@@ -13,16 +20,41 @@
   },
   "hosting": {
     "public": "web/dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "predeploy": ["npm --prefix web run build"],
-    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "predeploy": [
+      "npm --prefix web run build"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
   },
   "emulators": {
-    "auth": { "port": 9099 },
-    "functions": { "port": 5001 },
-    "firestore": { "port": 8080 },
-    "hosting": { "port": 5000 },
-    "ui": { "enabled": true, "port": 4000 },
-    "singleProjectMode": true
+    "auth": {
+      "port": 9199
+    },
+    "functions": {
+      "port": 5101
+    },
+    "firestore": {
+      "port": 8188
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4100
+    },
+    "singleProjectMode": true,
+    "hub": {
+      "port": 4500
+    },
+    "logging": {
+      "port": 4600
+    }
   }
 }
