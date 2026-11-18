@@ -1,14 +1,13 @@
 // Firestore の読み書き。
 //
 // settings/app                    … 期間・通貨ラベル・キャラクター候補
-// targets/{lineId}_{YYYY-MM}      … 1ページ目の目標（元）
 // entries/{autoId}                … ライセンス／オフライン／その他の案件（kind で区別）
 // onlineWeekly/{weekStart}        … 中国オンラインの週次（チャネル別）
 // weeks/{weekStart}               … 計上月の手動変更（現在は画面から変更しない）
 // auditLogs/{autoId}              … 変更履歴
 
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
-import { targetKey, type RawData } from "./domain/aggregate";
+import type { RawData } from "./domain/aggregate";
 import { DEFAULT_SETTINGS, currencyOf, type Channel, type Entry, type EntryInput, type EntryKind, type Settings } from "./domain/types";
 
 const db = () => getFirestore();
@@ -70,20 +69,6 @@ export async function deleteEntry(id: string): Promise<void> {
   await db().doc(`entries/${id}`).delete();
 }
 
-export async function saveTargets(changes: { lineId: string; month: string; value: number }[], uid: string) {
-  const batch = db().batch();
-  for (const c of changes) {
-    batch.set(db().doc(`targets/${c.lineId}_${c.month}`), {
-      lineId: c.lineId,
-      month: c.month,
-      amount: c.value,
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: uid,
-    });
-  }
-  await batch.commit();
-}
-
 export async function saveOnline(changes: { weekStart: string; channel: Channel; value: number }[], uid: string) {
   const batch = db().batch();
   for (const c of changes) {
@@ -98,18 +83,12 @@ export async function saveOnline(changes: { weekStart: string; channel: Channel;
 }
 
 export async function loadRaw(): Promise<RawData> {
-  const [settings, entries, targetsSnap, onlineSnap, weeksSnap] = await Promise.all([
+  const [settings, entries, onlineSnap, weeksSnap] = await Promise.all([
     getSettings(),
     listEntries(),
-    db().collection("targets").get(),
     db().collection("onlineWeekly").get(),
     db().collection("weeks").get(),
   ]);
-  const targets = new Map<string, number>();
-  for (const d of targetsSnap.docs) {
-    const x = d.data();
-    targets.set(targetKey(x.lineId, x.month), Number(x.amount ?? 0));
-  }
   const online = new Map<string, Partial<Record<Channel, number>>>();
   for (const d of onlineSnap.docs) {
     const x = d.data();
@@ -117,7 +96,7 @@ export async function loadRaw(): Promise<RawData> {
   }
   const weekOverrides: Record<string, string | null> = {};
   for (const d of weeksSnap.docs) weekOverrides[d.id] = d.data().bookingMonthOverride ?? null;
-  return { settings, entries, targets, online, weekOverrides };
+  return { settings, entries, online, weekOverrides };
 }
 
 export async function audit(uid: string, email: string | undefined, action: string, detail: Record<string, unknown>) {

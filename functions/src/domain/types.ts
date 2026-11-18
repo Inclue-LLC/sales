@@ -94,7 +94,13 @@ export interface OnlineView {
 
 // ---------- 1ページ目（売上一覧） ----------
 
-/** 目標を入力する行（国 × 区分） */
+/**
+ * 国ごとの毎月の目標（元）。画面からは編集できない固定値。
+ * 変えるときはここを書き換えて公開し直す。
+ */
+export const COUNTRY_TARGETS: Record<Country, number> = { CN: 100_000, JP: 100_000 };
+
+/** 売上一覧の区分（国 × 区分） */
 export interface Line {
   id: string; // 例: CN_LICENSE
   country: Country;
@@ -119,9 +125,7 @@ export interface SummaryRow {
   key: string;
   label: string;
   kind: SummaryRowKind;
-  /** 目標を入力できる行だけ入る */
-  lineId?: string;
-  /** 目標（内訳行=チャネルには目標がないので null） */
+  /** 目標（国・合計の行だけ。区分・内訳の行は null） */
   target: Record<string, number> | null;
   sales: Record<string, number>;
 }

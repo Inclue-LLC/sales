@@ -26,7 +26,7 @@ await db.doc("settings/app").set({
 });
 
 // 既存のサンプルを消してから入れ直す
-for (const col of ["entries", "targets", "onlineWeekly", "weeks"]) {
+for (const col of ["entries", "onlineWeekly", "weeks"]) {
   const snap = await db.collection(col).get();
   const b = db.batch();
   snap.docs.forEach((d) => b.delete(d.ref));
@@ -46,17 +46,6 @@ entry("license", { country: "JP", character: "スタジオハヌル", type: "MG"
 entry("offline", { country: "JP", character: "ふにゅ", type: "POP UP", venue: "渋谷PARCO", amount: 850_000, month: "2026-11" });
 entry("offline", { country: "CN", character: "Lovely MongMong", type: "委託販売", venue: "上海 サンプル書店", amount: 9_000, month: "2026-12" });
 entry("other", { country: "JP", content: "イラスト制作費", amount: 150_000, month: "2026-11" });
-
-const target = (lineId, month, amount) => batch.set(db.doc(`targets/${lineId}_${month}`), { lineId, month, amount });
-// 目標は元
-for (const m of ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]) {
-  target("CN_LICENSE", m, 50_000);
-  target("CN_ONLINE", m, 30_000);
-  target("CN_OFFLINE", m, 10_000);
-  target("JP_LICENSE", m, 40_000);
-  target("JP_OFFLINE", m, 30_000);
-  target("JP_OTHER", m, 5_000);
-}
 
 const weeks = ["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30", "2026-12-07"];
 weeks.forEach((w, i) =>

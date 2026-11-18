@@ -16,6 +16,7 @@ export {
   CHANNELS,
   COUNTRIES,
   COUNTRY_LABELS,
+  COUNTRY_TARGETS,
   CURRENCY_LABELS,
   LICENSE_TYPES,
   OFFLINE_TYPES,
@@ -50,7 +51,6 @@ async function api<T>(action: string, payload?: unknown): Promise<T> {
 
 export const Api = {
   getSummary: () => api<Summary>("getSummary"),
-  saveTargets: (changes: { lineId: string; month: string; value: number }[]) => api<Summary>("saveTargets", { changes }),
 
   listEntries: (kind: EntryKind) => api<Entry[]>("listEntries", { kind }),
   saveEntry: (kind: EntryKind, entry: EntryInput, id?: string) => api<Entry>("saveEntry", { kind, entry, id }),

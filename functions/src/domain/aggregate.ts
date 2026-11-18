@@ -3,6 +3,7 @@ import { listMonths, listWeeks } from "./period";
 import {
   CHANNELS,
   COUNTRIES,
+  COUNTRY_TARGETS,
   COUNTRY_LABELS,
   LINES,
   type Channel,
@@ -18,15 +19,11 @@ import {
 export interface RawData {
   settings: Settings;
   entries: Entry[];
-  /** `${lineId}|${month}` → 目標 */
-  targets: Map<string, number>;
   /** weekStart → チャネル別金額 */
   online: Map<string, Partial<Record<Channel, number>>>;
   /** weekStart → 手動の計上月 */
   weekOverrides: Record<string, string | null>;
 }
-
-export const targetKey = (lineId: string, month: string) => `${lineId}|${month}`;
 
 const emptyMonths = (months: string[]) => Object.fromEntries(months.map((m) => [m, 0])) as Record<string, number>;
 
@@ -77,15 +74,13 @@ export function buildSummary(raw: RawData): Summary {
     rows.push(countryRow);
     const lineRows: SummaryRow[] = [];
     for (const l of lines) {
-      const target = emptyMonths(months);
-      for (const m of months) target[m] = raw.targets.get(targetKey(l.id, m)) ?? 0;
       const sales = emptyMonths(months);
       if (l.source === "online") {
         for (const g of online.groups) sales[g.month] = g.total;
       } else {
         for (const m of months) sales[m] = entrySales.get(`${l.source}|${country}|${m}`) ?? 0;
       }
-      const row: SummaryRow = { key: l.id, label: l.label, kind: "line", lineId: l.id, target, sales };
+      const row: SummaryRow = { key: l.id, label: l.label, kind: "line", target: null, sales };
       rows.push(row);
       lineRows.push(row);
       if (l.source === "online") {
@@ -96,7 +91,7 @@ export function buildSummary(raw: RawData): Summary {
         }
       }
     }
-    countryRow.target = sum(lineRows.map((r) => r.target!), months);
+    countryRow.target = Object.fromEntries(months.map((m) => [m, COUNTRY_TARGETS[country]]));
     countryRow.sales = sum(lineRows.map((r) => r.sales), months);
     countryTotals.push(countryRow);
   }

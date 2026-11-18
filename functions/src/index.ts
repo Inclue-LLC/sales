@@ -6,8 +6,8 @@ import { getAuth } from "firebase-admin/auth";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { buildOnline, buildSummary } from "./domain/aggregate";
-import { listMonths, listWeeks } from "./domain/period";
-import { CHANNELS, LINES, SHARED_LOGIN_EMAIL, toCny, type Channel, type Entry } from "./domain/types";
+import { listWeeks } from "./domain/period";
+import { CHANNELS, SHARED_LOGIN_EMAIL, toCny, type Channel, type Entry } from "./domain/types";
 import * as V from "./domain/validate";
 import * as repo from "./repo";
 
@@ -29,18 +29,6 @@ const handlers: Record<string, Handler> = {
   // ---- 1ページ目 ----
   getSummary: () => summary(),
 
-  /** changes: [{lineId, month, value}] → 再計算後の一覧を返す */
-  saveTargets: async (p, ctx) => {
-    const s = await repo.getSettings();
-    const months = listMonths(s.startMonth, s.endMonth);
-    const changes = asArray(p.changes).map((c) => {
-      if (!LINES.some((l) => l.id === c.lineId)) throw new V.ValidationError("区分が不正です");
-      return { lineId: c.lineId as string, month: V.month(c.month, months), value: V.amount(c.value, "目標") };
-    });
-    await repo.saveTargets(changes, ctx.uid);
-    await repo.audit(ctx.uid, ctx.email, "saveTargets", { changes });
-    return summary();
-  },
 
   // ---- ライセンス／オフライン／その他 ----
   listEntries: async (p) => {

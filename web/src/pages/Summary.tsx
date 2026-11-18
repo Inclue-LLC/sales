@@ -1,14 +1,13 @@
 // 1ページ目：売上一覧。月が右に並び、各月に「目標」「売上」（単位：元）。
-// 目標はセルをクリックして入力。売上はライセンス／中国オンライン／オフライン／その他から自動で集計される。
+// 目標は国ごとの固定値（編集不可）。売上はライセンス／中国オンライン／オフライン／その他から自動で集計される。
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Api, type Summary, type SummaryRow } from "../api";
+import { Api, COUNTRY_TARGETS, type Summary, type SummaryRow } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { useToast } from "../components/Toast";
-import { defaultMonth, num, parseAmount } from "../format";
+import { defaultMonth, num } from "../format";
 
 export default function SummaryPage() {
   const [data, setData] = useState<Summary | null>(null);
-  const [saving, setSaving] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const toast = useToast();
 
@@ -30,17 +29,6 @@ export default function SummaryPage() {
     el.scrollLeft = Math.max(0, x - sticky.offsetWidth - 80);
   }, [data]);
 
-  const saveTarget = async (lineId: string, month: string, value: number) => {
-    setSaving(true);
-    try {
-      setData(await Api.saveTargets([{ lineId, month, value }]));
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (!data) return <div className="page loading">読み込み中…</div>;
   const thisMonth = new Date().toISOString().slice(0, 7);
 
@@ -50,14 +38,13 @@ export default function SummaryPage() {
         title="売上一覧"
         sub={
           <>
-            単位：元（日本の売上は設定のレート 1元＝{data.settings.jpyPerCny}円 で換算）。目標の数字をクリックすると入力できます。
+            単位：元（日本の売上は設定のレート 1元＝{data.settings.jpyPerCny}円 で換算）。目標（毎月・固定）：中国 {num(COUNTRY_TARGETS.CN)}元、日本 {num(COUNTRY_TARGETS.JP)}元。
             <span className="legend">
               <i className="over" />
               目標以上
               <i className="under" />
               目標未満
             </span>
-            <span className={`saving ${saving ? "on" : ""}`}>保存中…</span>
           </>
         }
       />
@@ -88,7 +75,7 @@ export default function SummaryPage() {
           </thead>
           <tbody>
             {data.rows.map((r) => (
-              <Row key={r.key} row={r} months={data.months} thisMonth={thisMonth} onSaveTarget={saveTarget} />
+              <Row key={r.key} row={r} months={data.months} thisMonth={thisMonth} />
             ))}
           </tbody>
         </table>
@@ -107,77 +94,19 @@ function compare(target: number | undefined, sales: number, month: string, thisM
   return month <= thisMonth ? "under" : "";
 }
 
-function Row(props: {
-  row: SummaryRow;
-  months: string[];
-  thisMonth: string;
-  onSaveTarget: (lineId: string, month: string, v: number) => void;
-}) {
+function Row(props: { row: SummaryRow; months: string[]; thisMonth: string }) {
   const r = props.row;
   return (
     <tr className={`row-${r.kind}`}>
       <th className="sticky-col">{r.label}</th>
       {props.months.map((m) => [
         <td key={`${m}t`} className="num target">
-          {r.lineId ? (
-            <TargetCell value={r.target![m]} onSave={(v) => props.onSaveTarget(r.lineId!, m, v)} />
-          ) : r.target ? (
-            num(r.target[m])
-          ) : (
-            ""
-          )}
+          {r.target ? num(r.target[m]) : ""}
         </td>,
         <td key={`${m}s`} className={`num sales ${r.target ? compare(r.target[m], r.sales[m], m, props.thisMonth) : ""}`}>
           {num(r.sales[m])}
         </td>,
       ])}
     </tr>
-  );
-}
-
-/** クリックで入力欄になる目標セル */
-function TargetCell(props: { value: number; onSave: (v: number) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState("");
-  const [invalid, setInvalid] = useState(false);
-
-  if (!editing)
-    return (
-      <button
-        className="target-btn"
-        title="クリックして目標を入力"
-        onClick={() => {
-          setText(props.value ? String(props.value) : "");
-          setInvalid(false);
-          setEditing(true);
-        }}
-      >
-        {num(props.value)}
-      </button>
-    );
-
-  const commit = () => {
-    const v = parseAmount(text);
-    if (v === null) {
-      setInvalid(true);
-      return;
-    }
-    setEditing(false);
-    if (v !== props.value) props.onSave(v);
-  };
-  return (
-    <input
-      className={`target-input ${invalid ? "invalid" : ""}`}
-      inputMode="numeric"
-      autoFocus
-      value={text}
-      onFocus={(e) => e.target.select()}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") commit();
-        if (e.key === "Escape") setEditing(false);
-      }}
-    />
   );
 }

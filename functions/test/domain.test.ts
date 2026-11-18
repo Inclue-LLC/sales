@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOnline, buildSummary, targetKey, type RawData } from "../src/domain/aggregate";
+import { buildOnline, buildSummary, type RawData } from "../src/domain/aggregate";
 import { listMonths, listWeeks } from "../src/domain/period";
 import { DEFAULT_SETTINGS, toCny, type Entry } from "../src/domain/types";
 import { entry, ValidationError } from "../src/domain/validate";
@@ -20,7 +20,6 @@ const e = (p: Partial<Entry>): Entry => ({
 const raw = (): RawData => ({
   settings: DEFAULT_SETTINGS,
   entries: [],
-  targets: new Map(),
   online: new Map(),
   weekOverrides: {},
 });
@@ -50,8 +49,6 @@ describe("summary", () => {
     ];
     r.online.set("2026-11-02", { xiaohongshu: 100, taobao: 50 });
     r.online.set("2026-11-30", { xiaohongshu: 7 }); // → 12月
-    r.targets.set(targetKey("CN_LICENSE", "2026-11"), 2000);
-    r.targets.set(targetKey("JP_OFFLINE", "2026-11"), 400);
 
     const s = buildSummary(r);
     const row = (k: string) => s.rows.find((x) => x.key === k)!;
@@ -61,12 +58,14 @@ describe("summary", () => {
     expect(row("CN_ONLINE_taobao").sales["2026-11"]).toBe(50);
     expect(row("CN_ONLINE").sales["2026-12"]).toBe(7);
     expect(row("CN").sales["2026-11"]).toBe(1650);
-    expect(row("CN").target!["2026-11"]).toBe(2000);
+    expect(row("CN").target!["2026-11"]).toBe(100_000);
+    expect(row("JP").target!["2027-12"]).toBe(100_000);
+    expect(row("CN_LICENSE").target).toBeNull();
     expect(row("JP").sales["2026-11"]).toBe(300);
     expect(row("JP_OFFLINE").sales["2026-11"]).toBe(300);
     expect(row("JP_OTHER").sales["2026-12"]).toBe(20);
     expect(row("GRAND_TOTAL").sales["2026-11"]).toBe(1950);
-    expect(row("GRAND_TOTAL").target!["2026-11"]).toBe(2400);
+    expect(row("GRAND_TOTAL").target!["2026-11"]).toBe(200_000);
 
     r.weekOverrides["2026-11-30"] = "2026-11";
     expect(buildSummary(r).rows.find((x) => x.key === "CN_ONLINE")!.sales["2026-11"]).toBe(157);
