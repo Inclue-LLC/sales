@@ -8,16 +8,28 @@ export const COUNTRY_LABELS: Record<Country, string> = { CN: "中国", JP: "日�
 export interface Settings {
   startMonth: string; // YYYY-MM
   endMonth: string; // YYYY-MM
-  currencyLabel: string;
+  jpyPerCny: number; // 為替レート：1元 = ○円
   characters: string[]; // キャラクター候補
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   startMonth: "2026-11",
   endMonth: "2027-12",
-  currencyLabel: "円",
+  jpyPerCny: 21,
   characters: ["スタジオハヌル", "Lovely MongMong", "ふにゅ"],
 };
+
+// ---------- 通貨 ----------
+// 集計・表示は元（CNY）。日本の案件は円（JPY）で入力し、設定のレートで元に換算する。
+
+export type Currency = "CNY" | "JPY";
+export const CURRENCY_LABELS: Record<Currency, string> = { CNY: "元", JPY: "円" };
+export const currencyOf = (c: Country): Currency => (c === "JP" ? "JPY" : "CNY");
+
+/** 元に換算（1円未満…ではなく 1元未満は四捨五入） */
+export function toCny(amount: number, currency: Currency, jpyPerCny: number): number {
+  return currency === "JPY" ? Math.round(amount / jpyPerCny) : amount;
+}
 
 // ---------- 案件（ライセンス／オフライン／その他） ----------
 
@@ -29,7 +41,7 @@ export const OFFLINE_TYPES = ["POP UP", "委託販売"] as const;
 export interface EntryInput {
   country: Country;
   month: string; // 計上月 YYYY-MM
-  amount: number; // 円・整数
+  amount: number; // 入力した通貨での金額（中国=元、日本=円）・整数
   character?: string; // ライセンス・オフライン
   type?: string; // ライセンス: MG/ロイヤリティ、オフライン: POP UP/委託販売
   venue?: string; // オフライン: お店の名前 or イベント名
@@ -39,6 +51,8 @@ export interface EntryInput {
 export interface Entry extends EntryInput {
   id: string;
   kind: EntryKind;
+  currency: Currency; // 入力した通貨（国で決まる）
+  amountCny: number; // 元に換算した金額（一覧表示・集計用）
   createdAt: string;
   updatedAt: string;
 }
@@ -98,7 +112,8 @@ export const LINES: Line[] = [
   { id: "JP_OTHER", country: "JP", label: "その他", source: "other" },
 ];
 
-export type SummaryRowKind = "country" | "line" | "channel" | "total" | "grand";
+/** country 行に国の合計を出す（国の「計」行は持たない） */
+export type SummaryRowKind = "country" | "line" | "channel" | "grand";
 
 export interface SummaryRow {
   key: string;

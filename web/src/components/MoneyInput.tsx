@@ -12,6 +12,8 @@ export function MoneyInput(props: {
   onCommit?: (v: number) => void;
   onChange?: (v: number) => void;
   label?: string;
+  /** 単位（元・円）。入力欄の右に表示 */
+  unit?: string;
   disabled?: boolean;
   autoFocus?: boolean;
 }) {
@@ -36,7 +38,6 @@ export function MoneyInput(props: {
 
   return (
     <div className={`money-input ${invalid ? "invalid" : ""}`}>
-      <span className="yen">¥</span>
       <input
         inputMode="numeric"
         placeholder="0"
@@ -62,6 +63,7 @@ export function MoneyInput(props: {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
       />
+      {props.unit && <span className="unit">{props.unit}</span>}
     </div>
   );
 }

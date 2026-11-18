@@ -60,10 +60,12 @@ export function kind(v: unknown): EntryKind {
 export function settings(v: unknown): Settings {
   const o = (v ?? {}) as Record<string, unknown>;
   if (!Array.isArray(o.characters)) fail("キャラクター候補が不正です");
+  const rate = Number(o.jpyPerCny);
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 1000) fail("為替レートは 0 より大きい数値で入力してください");
   const s: Settings = {
     startMonth: month(o.startMonth),
     endMonth: month(o.endMonth),
-    currencyLabel: str(o.currencyLabel, "通貨ラベル", 10) || "円",
+    jpyPerCny: Math.round(rate * 10000) / 10000,
     characters: [...new Set((o.characters as unknown[]).map((c) => str(c, "キャラクター", 50)).filter(Boolean))],
   };
   if (s.startMonth > s.endMonth) fail("終了月は開始月以降にしてください");

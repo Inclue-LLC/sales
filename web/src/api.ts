@@ -13,7 +13,7 @@ import { functions, useEmulators } from "./firebase";
 
 export type * from "../../functions/src/domain/types";
 // 定数は functions と共有（types.ts は依存のない純粋なモジュール）
-export { CHANNELS, COUNTRIES, COUNTRY_LABELS, LICENSE_TYPES, OFFLINE_TYPES } from "../../functions/src/domain/types";
+export { CHANNELS, COUNTRIES, COUNTRY_LABELS, CURRENCY_LABELS, LICENSE_TYPES, OFFLINE_TYPES, currencyOf } from "../../functions/src/domain/types";
 
 type Req = { action: string; payload?: unknown };
 const call = useEmulators
@@ -28,8 +28,6 @@ async function api<T>(action: string, payload?: unknown): Promise<T> {
   }
 }
 
-export type CsvKind = "summary" | "online" | EntryKind;
-
 export const Api = {
   getSummary: () => api<Summary>("getSummary"),
   saveTargets: (changes: { lineId: string; month: string; value: number }[]) => api<Summary>("saveTargets", { changes }),
@@ -40,7 +38,6 @@ export const Api = {
 
   getOnline: () => api<OnlineView>("getOnline"),
   saveOnline: (changes: { weekStart: string; channel: Channel; value: number }[]) => api<OnlineView>("saveOnline", { changes }),
-  setWeekBookingMonth: (weekStart: string, month: string | null) => api<OnlineView>("setWeekBookingMonth", { weekStart, month }),
 
   getSettings: () => api<Settings>("getSettings"),
   saveSettings: (settings: Settings) => api<Settings>("saveSettings", { settings }),
@@ -49,19 +46,4 @@ export const Api = {
   createMember: (email: string, password: string, displayName: string) => api<Member>("createMember", { email, password, displayName }),
   resetMemberPassword: (uid: string, password: string) => api<{ ok: true }>("resetMemberPassword", { uid, password }),
   deleteMember: (uid: string) => api<{ ok: true }>("deleteMember", { uid }),
-
-  exportCsv: (kind: CsvKind) => api<{ filename: string; content: string }>("exportCsv", { kind }),
 };
-
-/** CSV をダウンロードする（サーバーで BOM 付き UTF-8 を生成済み） */
-export async function downloadCsv(kind: CsvKind) {
-  const { filename, content } = await Api.exportCsv(kind);
-  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}

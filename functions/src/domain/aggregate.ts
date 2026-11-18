@@ -12,6 +12,7 @@ import {
   type Settings,
   type Summary,
   type SummaryRow,
+  toCny,
 } from "./types";
 
 export interface RawData {
@@ -59,11 +60,11 @@ export function buildSummary(raw: RawData): Summary {
   const months = listMonths(settings.startMonth, settings.endMonth);
   const online = buildOnline(raw);
 
-  // 案件の売上を 区分×国×月 で合計
+  // 案件の売上を 区分×国×月 で合計（元に換算）
   const entrySales = new Map<string, number>();
   for (const e of raw.entries) {
     const k = `${e.kind}|${e.country}|${e.month}`;
-    entrySales.set(k, (entrySales.get(k) ?? 0) + e.amount);
+    entrySales.set(k, (entrySales.get(k) ?? 0) + toCny(e.amount, e.currency, settings.jpyPerCny));
   }
 
   const rows: SummaryRow[] = [];
@@ -71,7 +72,9 @@ export function buildSummary(raw: RawData): Summary {
   for (const country of COUNTRIES) {
     const lines = LINES.filter((l) => l.country === country);
     if (lines.length === 0) continue;
-    rows.push({ key: country, label: COUNTRY_LABELS[country], kind: "country", target: null, sales: {} });
+    // 国の行に合計を出す（下の行がそろってから値を入れる）
+    const countryRow: SummaryRow = { key: country, label: COUNTRY_LABELS[country], kind: "country", target: null, sales: {} };
+    rows.push(countryRow);
     const lineRows: SummaryRow[] = [];
     for (const l of lines) {
       const target = emptyMonths(months);
@@ -93,15 +96,9 @@ export function buildSummary(raw: RawData): Summary {
         }
       }
     }
-    const total: SummaryRow = {
-      key: `${country}_TOTAL`,
-      label: `${COUNTRY_LABELS[country]} 計`,
-      kind: "total",
-      target: sum(lineRows.map((r) => r.target!), months),
-      sales: sum(lineRows.map((r) => r.sales), months),
-    };
-    rows.push(total);
-    countryTotals.push(total);
+    countryRow.target = sum(lineRows.map((r) => r.target!), months);
+    countryRow.sales = sum(lineRows.map((r) => r.sales), months);
+    countryTotals.push(countryRow);
   }
   rows.push({
     key: "GRAND_TOTAL",

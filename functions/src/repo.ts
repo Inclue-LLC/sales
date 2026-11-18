@@ -1,16 +1,16 @@
 // Firestore の読み書き。
 //
 // settings/app                    … 期間・通貨ラベル・キャラクター候補
-// targets/{lineId}_{YYYY-MM}      … 1ページ目の目標
+// targets/{lineId}_{YYYY-MM}      … 1ページ目の目標（元）
 // entries/{autoId}                … ライセンス／オフライン／その他の案件（kind で区別）
 // onlineWeekly/{weekStart}        … 中国オンラインの週次（チャネル別）
-// weeks/{weekStart}               … 計上月の手動変更
+// weeks/{weekStart}               … 計上月の手動変更（現在は画面から変更しない）
 // members/{uid}                   … 利用を許可したメンバー
 // auditLogs/{autoId}              … 変更履歴
 
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { targetKey, type RawData } from "./domain/aggregate";
-import { DEFAULT_SETTINGS, type Channel, type Entry, type EntryInput, type EntryKind, type Settings } from "./domain/types";
+import { DEFAULT_SETTINGS, currencyOf, type Channel, type Entry, type EntryInput, type EntryKind, type Settings } from "./domain/types";
 
 const db = () => getFirestore();
 const iso = (v: unknown) => (v as { toDate?: () => Date })?.toDate?.().toISOString() ?? "";
@@ -31,6 +31,8 @@ function toEntry(id: string, x: FirebaseFirestore.DocumentData): Entry {
     country: x.country,
     month: x.month,
     amount: x.amount ?? 0,
+    currency: x.currency ?? currencyOf(x.country),
+    amountCny: 0, // 呼び出し側でレートを使って計算する
     character: x.character,
     type: x.type,
     venue: x.venue,
@@ -54,14 +56,14 @@ export async function getEntry(id: string): Promise<Entry | null> {
 export async function createEntry(kind: EntryKind, input: EntryInput, uid: string): Promise<Entry> {
   const ref = await db()
     .collection("entries")
-    .add({ ...input, kind, currency: "JPY", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+    .add({ ...input, kind, currency: currencyOf(input.country), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
   return (await getEntry(ref.id))!;
 }
 
 export async function updateEntry(id: string, input: EntryInput, uid: string): Promise<Entry> {
   await db()
     .doc(`entries/${id}`)
-    .update({ ...input, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+    .update({ ...input, currency: currencyOf(input.country), updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
   return (await getEntry(id))!;
 }
 
@@ -89,15 +91,11 @@ export async function saveOnline(changes: { weekStart: string; channel: Channel;
     // チャネル単位で merge するので、別のチャネルを同時に編集しても上書きし合わない
     batch.set(
       db().doc(`onlineWeekly/${c.weekStart}`),
-      { weekStart: c.weekStart, [c.channel]: c.value, currency: "JPY", updatedAt: FieldValue.serverTimestamp(), updatedBy: uid },
+      { weekStart: c.weekStart, [c.channel]: c.value, currency: "CNY", updatedAt: FieldValue.serverTimestamp(), updatedBy: uid },
       { merge: true },
     );
   }
   await batch.commit();
-}
-
-export async function setWeekOverride(weekStart: string, month: string | null, uid: string) {
-  await db().doc(`weeks/${weekStart}`).set({ bookingMonthOverride: month, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
 }
 
 export async function loadRaw(): Promise<RawData> {

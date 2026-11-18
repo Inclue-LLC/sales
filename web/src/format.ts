@@ -1,7 +1,7 @@
 const nf = new Intl.NumberFormat("ja-JP");
 
 /** 3桁区切り。0（または空）は「-」 */
-export function yen(v: number | null | undefined): string {
+export function num(v: number | null | undefined): string {
   if (v === null || v === undefined || v === 0) return "-";
   return nf.format(v);
 }

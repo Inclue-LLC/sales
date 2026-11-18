@@ -44,7 +44,7 @@ export default function SettingsPage() {
     <div className="page settings">
       <PageHeader title="設定" actions={<span className="mobile-only"><LogoutButton /></span>} />
       <form className="card" onSubmit={save}>
-        <h2>期間</h2>
+        <h2>期間・為替レート</h2>
         <div className="form-grid">
           <label>
             開始月
@@ -55,11 +55,20 @@ export default function SettingsPage() {
             <input type="month" required value={settings.endMonth} onChange={(e) => setSettings({ ...settings, endMonth: e.target.value })} />
           </label>
           <label>
-            通貨の表示
-            <input value={settings.currencyLabel} maxLength={10} onChange={(e) => setSettings({ ...settings, currencyLabel: e.target.value })} />
+            為替レート（1元 = ○円）
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              value={settings.jpyPerCny}
+              onChange={(e) => setSettings({ ...settings, jpyPerCny: Number(e.target.value) })}
+            />
           </label>
         </div>
-        <p className="hint">期間を縮めても、入力済みのデータは消えません（期間を戻すと再表示されます）。</p>
+        <p className="hint">
+          日本の売上は円で入力し、このレートで元に換算して表示・集計します（レートを変えると過去の分も含めて換算し直します）。期間を縮めても、入力済みのデータは消えません。
+        </p>
         <h2>キャラクター候補</h2>
         <p className="hint">1行に1つずつ入力します。入力フォームの候補に表示されます（候補にない名前も入力できます）。</p>
         <textarea rows={5} value={chars} onChange={(e) => setChars(e.target.value)} />

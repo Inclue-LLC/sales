@@ -2,12 +2,11 @@
 // 入力した金額は計上月ごとに 1ページ目（売上一覧）へ自動で反映される。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listMonths } from "../../../functions/src/domain/period";
-import { Api, COUNTRIES, COUNTRY_LABELS, downloadCsv, type Country, type Entry, type EntryInput, type EntryKind, type Settings } from "../api";
-import { IconDownload } from "../components/Icons";
+import { Api, COUNTRIES, COUNTRY_LABELS, CURRENCY_LABELS, currencyOf, type Country, type Entry, type EntryInput, type EntryKind, type Settings } from "../api";
 import { MoneyInput } from "../components/MoneyInput";
 import { PageHeader } from "../components/PageHeader";
 import { useToast } from "../components/Toast";
-import { defaultMonth, monthLabel, yen } from "../format";
+import { defaultMonth, monthLabel, num } from "../format";
 
 export type FieldDef =
   | { key: "character"; label: string; kind: "character" }
@@ -66,7 +65,7 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
     () => (entries ?? []).filter((e) => (!fCountry || e.country === fCountry) && (!fMonth || e.month === fMonth)),
     [entries, fCountry, fMonth],
   );
-  const filteredTotal = filtered.reduce((a, e) => a + e.amount, 0);
+  const filteredTotal = filtered.reduce((a, e) => a + e.amountCny, 0);
 
   const submit = async (ev: React.FormEvent) => {
     ev.preventDefault();
@@ -114,16 +113,7 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
 
   return (
     <div className="page">
-      <PageHeader
-        title={config.title}
-        sub={config.description}
-        actions={
-          <button className="btn ghost" onClick={() => downloadCsv(config.kind).catch((e) => toast.error(e.message))}>
-            <IconDownload size={16} />
-            CSV
-          </button>
-        }
-      />
+      <PageHeader title={config.title} sub={config.description} />
 
       <form className={`card entry-form ${editingId ? "is-editing" : ""}`} onSubmit={submit}>
         <h2>{editingId ? "編集中" : "新しく追加"}</h2>
@@ -142,14 +132,7 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
             <label key={f.key} className={f.kind === "text" && f.wide ? "wide" : ""}>
               {f.label}
               {f.kind === "character" && (
-                <>
-                  <input list="characters" required value={draft.character ?? ""} placeholder="選択または入力" onChange={(e) => set("character", e.target.value)} />
-                  <datalist id="characters">
-                    {settings.characters.map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
-                </>
+                <CharacterSelect options={settings.characters} value={draft.character ?? ""} onChange={(v) => set("character", v)} />
               )}
               {f.kind === "choice" && (
                 <div className="toggle">
@@ -166,8 +149,8 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
             </label>
           ))}
           <label>
-            金額
-            <MoneyInput value={draft.amount} onChange={(v) => set("amount", v)} label="金額" />
+            金額（{CURRENCY_LABELS[currencyOf(draft.country)]}）
+            <MoneyInput value={draft.amount} onChange={(v) => set("amount", v)} label="金額" unit={CURRENCY_LABELS[currencyOf(draft.country)]} />
           </label>
           <label>
             計上月
@@ -235,7 +218,7 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
                   {config.fields.map((f) => (
                     <th key={f.key}>{f.label}</th>
                   ))}
-                  <th className="num">金額</th>
+                  <th className="num">金額（元）</th>
                   <th />
                 </tr>
               </thead>
@@ -249,7 +232,10 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
                     {config.fields.map((f) => (
                       <td key={f.key}>{f.kind === "choice" ? <span className="tag">{e[f.key]}</span> : e[f.key]}</td>
                     ))}
-                    <td className="num">¥{yen(e.amount)}</td>
+                    <td className="num">
+                      {num(e.amountCny)}元
+                      {e.currency === "JPY" && <small className="orig">（{num(e.amount)}円）</small>}
+                    </td>
                     <td className="row-actions">
                       <button className="btn small" onClick={() => startEdit(e)}>
                         編集
@@ -264,7 +250,7 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
               <tfoot>
                 <tr>
                   <td colSpan={2 + config.fields.length}>合計（{filtered.length}件）</td>
-                  <td className="num">¥{yen(filteredTotal)}</td>
+                  <td className="num">{num(filteredTotal)}元</td>
                   <td />
                 </tr>
               </tfoot>
@@ -272,6 +258,51 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+const NEW = "__new__";
+
+/**
+ * キャラクターの選択。候補から選ぶか「その他（直接入力）」で自由に入力する。
+ * いつでも別の候補に選び直せる。
+ */
+function CharacterSelect(props: { options: string[]; value: string; onChange: (v: string) => void }) {
+  const inList = props.value === "" || props.options.includes(props.value);
+  const [custom, setCustom] = useState(!inList);
+  useEffect(() => {
+    if (!inList) setCustom(true);
+  }, [inList]);
+
+  return (
+    <div className="character-select">
+      <select
+        required={!custom}
+        value={custom ? NEW : props.value}
+        onChange={(e) => {
+          if (e.target.value === NEW) {
+            setCustom(true);
+            props.onChange("");
+          } else {
+            setCustom(false);
+            props.onChange(e.target.value);
+          }
+        }}
+      >
+        <option value="" disabled>
+          選択してください
+        </option>
+        {props.options.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+        <option value={NEW}>その他（直接入力）</option>
+      </select>
+      {custom && (
+        <input required autoFocus placeholder="キャラクター名を入力" value={props.value} onChange={(e) => props.onChange(e.target.value)} />
+      )}
     </div>
   );
 }

@@ -1,11 +1,10 @@
-// 1ページ目：売上一覧。月が右に並び、各月に「目標」「売上」。
+// 1ページ目：売上一覧。月が右に並び、各月に「目標」「売上」（単位：元）。
 // 目標はセルをクリックして入力。売上はライセンス／中国オンライン／オフライン／その他から自動で集計される。
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Api, downloadCsv, type Summary, type SummaryRow } from "../api";
-import { IconDownload } from "../components/Icons";
+import { Api, type Summary, type SummaryRow } from "../api";
 import { PageHeader } from "../components/PageHeader";
 import { useToast } from "../components/Toast";
-import { defaultMonth, parseAmount, yen } from "../format";
+import { defaultMonth, num, parseAmount } from "../format";
 
 export default function SummaryPage() {
   const [data, setData] = useState<Summary | null>(null);
@@ -27,7 +26,6 @@ export default function SummaryPage() {
     const th = el.querySelector<HTMLElement>(`[data-month="${defaultMonth(data.months)}"]`);
     const sticky = el.querySelector<HTMLElement>("thead .sticky-col");
     if (!th || !sticky) return;
-    // 区分列のすぐ右に今月が来る位置（1つ前の月も少し見えるように）
     const x = th.getBoundingClientRect().left - el.getBoundingClientRect().left + el.scrollLeft;
     el.scrollLeft = Math.max(0, x - sticky.offsetWidth - 80);
   }, [data]);
@@ -47,20 +45,20 @@ export default function SummaryPage() {
   const thisMonth = new Date().toISOString().slice(0, 7);
 
   return (
-    <div className="page">
+    <div className="page page-summary">
       <PageHeader
         title="売上一覧"
         sub={
           <>
-            目標の数字をクリックすると入力できます。売上は各ページの入力から自動で集計されます（単位：{data.settings.currencyLabel}）
+            単位：元（日本の売上は設定のレート 1元＝{data.settings.jpyPerCny}円 で換算）。目標の数字をクリックすると入力できます。
+            <span className="legend">
+              <i className="over" />
+              目標以上
+              <i className="under" />
+              目標未満
+            </span>
             <span className={`saving ${saving ? "on" : ""}`}>保存中…</span>
           </>
-        }
-        actions={
-          <button className="btn ghost" onClick={() => downloadCsv("summary").catch((e) => toast.error(e.message))}>
-            <IconDownload size={16} />
-            CSV
-          </button>
         }
       />
       <div className="table-card" ref={scroller}>
@@ -82,7 +80,7 @@ export default function SummaryPage() {
                 <th key={`${m}t`} className="sub-head">
                   目標
                 </th>,
-                <th key={`${m}s`} className="sub-head month-end">
+                <th key={`${m}s`} className="sub-head">
                   売上
                 </th>,
               ])}
@@ -90,7 +88,7 @@ export default function SummaryPage() {
           </thead>
           <tbody>
             {data.rows.map((r) => (
-              <Row key={r.key} row={r} months={data.months} onSaveTarget={saveTarget} />
+              <Row key={r.key} row={r} months={data.months} thisMonth={thisMonth} onSaveTarget={saveTarget} />
             ))}
           </tbody>
         </table>
@@ -99,16 +97,23 @@ export default function SummaryPage() {
   );
 }
 
-function Row(props: { row: SummaryRow; months: string[]; onSaveTarget: (lineId: string, month: string, v: number) => void }) {
+/**
+ * 目標との比較で色を付ける。
+ * 目標以上 → 青、目標未満 → 赤。目標が未入力の月と、まだ来ていない月で未達のものは色を付けない。
+ */
+function compare(target: number | undefined, sales: number, month: string, thisMonth: string): string {
+  if (!target) return "";
+  if (sales >= target) return "over";
+  return month <= thisMonth ? "under" : "";
+}
+
+function Row(props: {
+  row: SummaryRow;
+  months: string[];
+  thisMonth: string;
+  onSaveTarget: (lineId: string, month: string, v: number) => void;
+}) {
   const r = props.row;
-  if (r.kind === "country") {
-    return (
-      <tr className="row-country">
-        <th className="sticky-col">{r.label}</th>
-        <td colSpan={props.months.length * 2} />
-      </tr>
-    );
-  }
   return (
     <tr className={`row-${r.kind}`}>
       <th className="sticky-col">{r.label}</th>
@@ -117,13 +122,13 @@ function Row(props: { row: SummaryRow; months: string[]; onSaveTarget: (lineId: 
           {r.lineId ? (
             <TargetCell value={r.target![m]} onSave={(v) => props.onSaveTarget(r.lineId!, m, v)} />
           ) : r.target ? (
-            yen(r.target[m])
+            num(r.target[m])
           ) : (
             ""
           )}
         </td>,
-        <td key={`${m}s`} className={`num sales month-end ${r.target && r.sales[m] >= r.target[m] && r.target[m] > 0 ? "achieved" : ""}`}>
-          {yen(r.sales[m])}
+        <td key={`${m}s`} className={`num sales ${r.target ? compare(r.target[m], r.sales[m], m, props.thisMonth) : ""}`}>
+          {num(r.sales[m])}
         </td>,
       ])}
     </tr>
@@ -147,7 +152,7 @@ function TargetCell(props: { value: number; onSave: (v: number) => void }) {
           setEditing(true);
         }}
       >
-        {yen(props.value)}
+        {num(props.value)}
       </button>
     );
 

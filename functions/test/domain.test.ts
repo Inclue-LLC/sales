@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { buildOnline, buildSummary, targetKey, type RawData } from "../src/domain/aggregate";
-import { summaryCsv } from "../src/domain/csv";
 import { listMonths, listWeeks } from "../src/domain/period";
-import { DEFAULT_SETTINGS, type Entry } from "../src/domain/types";
+import { DEFAULT_SETTINGS, toCny, type Entry } from "../src/domain/types";
 import { entry, ValidationError } from "../src/domain/validate";
 
 const e = (p: Partial<Entry>): Entry => ({
   id: Math.random().toString(),
   kind: "license",
   country: "CN",
+  currency: p.country === "JP" ? "JPY" : "CNY",
   month: "2026-11",
   amount: 0,
+  amountCny: 0,
   createdAt: "",
   updatedAt: "",
   ...p,
@@ -44,8 +45,8 @@ describe("summary", () => {
     r.entries = [
       e({ kind: "license", country: "CN", amount: 1000 }),
       e({ kind: "license", country: "CN", amount: 500 }),
-      e({ kind: "offline", country: "JP", amount: 300 }),
-      e({ kind: "other", country: "JP", amount: 20, month: "2026-12" }),
+      e({ kind: "offline", country: "JP", amount: 6300 }), // 6300円 ÷ 21 = 300元
+      e({ kind: "other", country: "JP", amount: 420, month: "2026-12" }), // 20元
     ];
     r.online.set("2026-11-02", { xiaohongshu: 100, taobao: 50 });
     r.online.set("2026-11-30", { xiaohongshu: 7 }); // → 12月
@@ -59,9 +60,10 @@ describe("summary", () => {
     expect(row("CN_ONLINE_xiaohongshu").sales["2026-11"]).toBe(100);
     expect(row("CN_ONLINE_taobao").sales["2026-11"]).toBe(50);
     expect(row("CN_ONLINE").sales["2026-12"]).toBe(7);
-    expect(row("CN_TOTAL").sales["2026-11"]).toBe(1650);
-    expect(row("CN_TOTAL").target!["2026-11"]).toBe(2000);
-    expect(row("JP_TOTAL").sales["2026-11"]).toBe(300);
+    expect(row("CN").sales["2026-11"]).toBe(1650);
+    expect(row("CN").target!["2026-11"]).toBe(2000);
+    expect(row("JP").sales["2026-11"]).toBe(300);
+    expect(row("JP_OFFLINE").sales["2026-11"]).toBe(300);
     expect(row("JP_OTHER").sales["2026-12"]).toBe(20);
     expect(row("GRAND_TOTAL").sales["2026-11"]).toBe(1950);
     expect(row("GRAND_TOTAL").target!["2026-11"]).toBe(2400);
@@ -72,8 +74,8 @@ describe("summary", () => {
 
   it("orders rows China first, then Japan", () => {
     expect(buildSummary(raw()).rows.map((r) => r.label)).toEqual([
-      "中国", "ライセンス", "オンライン", "小红书", "淘宝", "オフライン", "その他", "中国 計",
-      "日本", "ライセンス", "オフライン", "その他", "日本 計",
+      "中国", "ライセンス", "オンライン", "小红书", "淘宝", "オフライン", "その他",
+      "日本", "ライセンス", "オフライン", "その他",
       "合計",
     ]);
   });
@@ -97,10 +99,9 @@ describe("validate", () => {
   });
 });
 
-describe("csv", () => {
-  it("has a BOM and two columns per month", () => {
-    const csv = summaryCsv(buildSummary(raw()));
-    expect(csv.charCodeAt(0)).toBe(0xfeff);
-    expect(csv.split("\r\n")[1].split(",")).toHaveLength(1 + 14 * 2);
+describe("currency", () => {
+  it("converts yen to yuan with the configured rate", () => {
+    expect(toCny(10000, "JPY", 21)).toBe(476);
+    expect(toCny(10000, "CNY", 21)).toBe(10000);
   });
 });

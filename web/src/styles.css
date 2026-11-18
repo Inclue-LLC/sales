@@ -124,17 +124,19 @@ textarea {
   display: flex;
   align-items: center;
 }
-.money-input .yen {
+.money-input .unit {
   position: absolute;
-  left: 10px;
+  right: 10px;
   color: var(--muted);
   font-size: 13px;
   pointer-events: none;
 }
 .money-input input {
-  padding-left: 24px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.money-input:has(.unit) input {
+  padding-right: 30px;
 }
 .money-input.invalid input {
   border-color: var(--danger);
@@ -347,7 +349,10 @@ main {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: auto;
-  max-height: calc(100dvh - 170px);
+}
+.page-summary {
+  gap: 12px;
+  padding-top: 22px;
 }
 table {
   border-collapse: separate;
@@ -359,8 +364,8 @@ table {
 }
 .summary th,
 .summary td {
-  padding: 0 12px;
-  height: 40px;
+  padding: 0 10px;
+  height: 36px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
@@ -372,9 +377,12 @@ table {
   font-weight: 600;
   white-space: nowrap;
 }
+.summary thead tr:first-child th {
+  height: 32px;
+}
 .summary thead tr:nth-child(2) th {
-  top: 40px;
-  height: 30px;
+  top: 32px;
+  height: 26px;
 }
 .summary thead th.month {
   text-align: center;
@@ -420,14 +428,20 @@ table {
   min-width: 108px;
   font-weight: 600;
 }
-.summary td.sales.achieved {
-  color: var(--good);
+.summary td.sales.over {
+  color: #1d4ed8;
+}
+.summary td.sales.under {
+  color: #d33a3a;
 }
 .summary .row-country th,
 .summary .row-country td {
-  background: var(--surface-2);
+  background: #eef1f6;
   font-weight: 700;
-  height: 36px;
+  border-top: 1px solid var(--line-strong);
+}
+.summary .row-country td.target {
+  color: var(--text);
 }
 .summary .row-line .sticky-col {
   padding-left: 26px;
@@ -436,7 +450,7 @@ table {
 .summary .row-channel td {
   color: var(--muted);
   font-size: 12.5px;
-  height: 32px;
+  height: 28px;
 }
 .summary .row-channel .sticky-col {
   padding-left: 44px;
@@ -445,21 +459,37 @@ table {
 .summary .row-channel td.sales {
   font-weight: 400;
 }
-.summary .row-total th,
-.summary .row-total td {
-  background: #f1f3f7;
-  font-weight: 700;
-}
 .summary .row-grand th,
 .summary .row-grand td {
-  background: #e7ebf4;
+  background: #e2e7f2;
   font-weight: 700;
+  border-top: 2px solid var(--line-strong);
   border-bottom: none;
+}
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
+  white-space: nowrap;
+}
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
+.legend i.over {
+  background: #1d4ed8;
+}
+.legend i.under {
+  background: #d33a3a;
 }
 .target-btn {
   width: 100%;
   justify-content: flex-end;
-  padding: 4px 6px;
+  padding: 3px 6px;
   border: 1px dashed transparent;
   background: transparent;
   color: inherit;
@@ -475,7 +505,7 @@ table {
 }
 .target-input {
   width: 110px;
-  padding: 4px 6px;
+  padding: 3px 6px;
   text-align: right;
   font-size: 13.5px;
 }
@@ -805,15 +835,22 @@ table {
   .weekly .input-cell {
     min-width: 130px;
   }
-  .money-input .yen {
-    display: none;
-  }
-  .money-input input {
-    padding-left: 8px;
-  }
+
   .toasts {
     bottom: 76px;
     left: 14px;
     right: 14px;
   }
+}
+
+.character-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.orig {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 400;
 }
