@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "setup": "npm install && npm --prefix functions install && npm --prefix web install",
-    "dev": "npm --prefix functions run build && node scripts/ensure-dir.mjs emulator-data && concurrently -k -n fn,emu,web -c blue,magenta,green \"npm --prefix functions run build:watch\" \"firebase emulators:start --import=./emulator-data --export-on-exit\" \"npm --prefix web run dev\"",
+    "dev": "npm --prefix functions run build && node scripts/ensure-dir.mjs emulator-data && concurrently -k -n fn,emu,web -c blue,magenta,green \"npm --prefix functions run build:watch\" \"firebase emulators:start --only auth,functions,firestore --import=./emulator-data --export-on-exit\" \"npm --prefix web run dev\"",
     "seed": "node scripts/seed.mjs",
     "create-member": "node scripts/create-member.mjs",
     "test": "npm --prefix functions test",
