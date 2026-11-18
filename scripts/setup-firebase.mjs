@@ -19,8 +19,9 @@ const pick = (text, key) => text.match(new RegExp(`${key}\\s*:\\s*["'\`]([^"'\`]
 rl.on("line", (line) => {
   lines.push(line);
   const text = lines.join("\n");
-  // 必要な値がそろったら（または閉じかっこが来たら）終了
-  if (keys.every((k) => pick(text, k)) || /}\s*;?\s*$/.test(line)) rl.close();
+  // 閉じかっこ「};」まで読んだら終了（貼り付けの残りがターミナルに流れ込まないように）。
+  // 閉じかっこが無くても、値がそろった後に空行（Enter）が来たら終了。
+  if (/^\s*}\s*;?\s*$/.test(line) || (line.trim() === "" && keys.every((k) => pick(text, k)))) rl.close();
 });
 
 rl.on("close", () => {
