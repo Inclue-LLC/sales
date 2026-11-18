@@ -6,6 +6,6 @@ web/dist/
 firebase-debug.*
 firestore-debug.log
 ui-debug.log
-.env.local
+.env*.local
 .DS_Store
 emulator-data/

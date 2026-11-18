@@ -70,7 +70,12 @@ npm test
 2. 左下の料金プランを **Blaze（従量課金）** に変更（Cloud Functions に必要。この規模なら通常は無料枠内）。念のため予算アラートを設定する。
 3. 「Authentication」→「始める」→「メール/パスワード」を有効にする。
 4. 「Firestore Database」→「データベースを作成」→ ロケーション `asia-northeast1（東京）`、本番環境モードで作成。
-5. 「プロジェクトの設定」→「マイアプリ」→ ウェブアプリ（`</>`）を追加し、表示された `firebaseConfig` の値を `web/.env.production.local` に書く（`web/.env.example` をコピーして作る。このファイルは Git に入らない）。
+5. 「プロジェクトの設定」→「マイアプリ」→ ウェブアプリ（`</>`）を追加する。
+6. 表示された `const firebaseConfig = { ... };` をコピーし、次を実行して貼り付ける（本番用の設定ファイル `web/.env.production.local` が作られる。このファイルは Git に入らない）。
+
+   ```bash
+   npm run setup-firebase
+   ```
 
 ### 公開（デプロイ）
 
@@ -79,7 +84,7 @@ npx firebase login
 ```
 
 ```bash
-npx firebase deploy --project <プロジェクトID>
+npm run deploy
 ```
 
 初回は数分かかります。完了すると `Hosting URL: https://<プロジェクトID>.web.app` が表示されます。
@@ -92,7 +97,7 @@ npx firebase deploy --project <プロジェクトID>
 
 ### 更新するとき
 
-コードを更新したら、もう一度 `npx firebase deploy --project <プロジェクトID>` を実行します。
+コードを更新したら、もう一度 `npm run deploy` を実行します。
 
 ## 決めごと
 
