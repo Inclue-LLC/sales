@@ -14,7 +14,7 @@ const docs = {
   "inv-jp-license": { ...base, number: "INV-2026-0101", status: "issued", clientName: "株式会社サンプル雑貨", dueDate: "2026-11-30", totals: { total: 330_000 },
     pl: { country: "JP", kind: "license", character: "スタジオハヌル", type: "ロイヤリティ", venue: "", content: "" } },
   "inv-cn-offline": { ...base, number: "INV-2026-0102", status: "paid", clientName: "上海サンプル文化", dueDate: "2026-12-31", totals: { total: 105_000 },
-    pl: { country: "CN", kind: "offline", character: "ふにゅ", type: "委託販売", venue: "上海 POP UP", content: "" } },
+    pl: { country: "JP", kind: "offline", character: "ふにゅ", type: "委託販売", venue: "上海 POP UP", content: "" } },
   "inv-draft": { ...base, number: "INV-2026-0103", status: "draft", dueDate: "2026-11-30", totals: { total: 999_999 },
     pl: { country: "JP", kind: "other", character: "", type: "", venue: "", content: "下書き" } },
   "inv-nopl": { ...base, number: "INV-2026-0104", status: "issued", dueDate: "2026-11-30", totals: { total: 888_888 }, pl: null },

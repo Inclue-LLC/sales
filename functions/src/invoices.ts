@@ -2,12 +2,13 @@
 //
 // - 読み取り専用。請求書ツールの Firestore に、この関数の実行アカウントの「Cloud Datastore 閲覧者」権限が必要
 // - 対象: 種別が請求書で、状態が 発行済 / 入金済、かつ「PL管理に反映する」区分（pl）が付いているもの
+// - 国: すべて日本（請求書ツールは日本の売上だけを扱う）
 // - 金額: 税込合計（円）。計上月: お支払期限の月（未入力なら発行日の月）
 // - 請求書ツールのプロジェクトID は functions/.env の INVOICE_PROJECT_ID（空なら連携しない）
 
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { COUNTRIES, type Entry, type EntryKind } from "./domain/types";
+import type { Entry, EntryKind } from "./domain/types";
 
 const KINDS: EntryKind[] = ["license", "offline", "other"];
 
@@ -23,7 +24,7 @@ export function invoiceToEntry(id: string, d: FirebaseFirestore.DocumentData): E
   const pl = d.pl;
   if (d.type !== "invoice" || !pl) return null;
   if (d.status !== "issued" && d.status !== "paid") return null;
-  if (!COUNTRIES.includes(pl.country) || !KINDS.includes(pl.kind)) return null;
+  if (!KINDS.includes(pl.kind)) return null;
   const month = String(d.dueDate || d.issueDate || "").slice(0, 7);
   if (!/^\d{4}-\d{2}$/.test(month)) return null;
   const amount = Number(d.totals?.total ?? 0);
@@ -35,7 +36,7 @@ export function invoiceToEntry(id: string, d: FirebaseFirestore.DocumentData): E
     invoiceId: id,
     invoiceNumber: d.number ?? "",
     clientName: d.clientName ?? "",
-    country: pl.country,
+    country: "JP", // 請求書ツールの売上はすべて日本
     month,
     amount,
     currency: "JPY", // 請求書は円建て

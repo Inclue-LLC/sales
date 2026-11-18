@@ -44,11 +44,13 @@ describe("invoiceToEntry", () => {
     expect(invoiceToEntry("a", inv({ dueDate: "" }))!.month).toBe("2026-11");
   });
 
-  it("counts a yen invoice for China in yuan on the summary", () => {
+  it("always books invoices to Japan, in yuan on the summary", () => {
     const e = invoiceToEntry("a", inv({ pl: { country: "CN", kind: "other", character: "", type: "", venue: "", content: "監修料" } }))!;
+    expect(e.country).toBe("JP");
     const s = buildSummary({ settings: DEFAULT_SETTINGS, entries: [e], online: new Map(), weekOverrides: {} });
     // 210,000円 ÷ 21 = 10,000元
-    expect(s.rows.find((r) => r.key === "CN_OTHER")!.sales["2026-12"]).toBe(10_000);
-    expect(s.rows.find((r) => r.key === "CN")!.sales["2026-12"]).toBe(10_000);
+    expect(s.rows.find((r) => r.key === "JP_OTHER")!.sales["2026-12"]).toBe(10_000);
+    expect(s.rows.find((r) => r.key === "JP")!.sales["2026-12"]).toBe(10_000);
+    expect(s.rows.find((r) => r.key === "CN")!.sales["2026-12"]).toBe(0);
   });
 });
