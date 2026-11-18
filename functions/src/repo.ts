@@ -8,6 +8,7 @@
 
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import type { RawData } from "./domain/aggregate";
+import { listInvoiceEntries } from "./invoices";
 import { DEFAULT_SETTINGS, currencyOf, type Channel, type Entry, type EntryInput, type EntryKind, type Settings } from "./domain/types";
 
 const db = () => getFirestore();
@@ -83,9 +84,10 @@ export async function saveOnline(changes: { weekStart: string; channel: Channel;
 }
 
 export async function loadRaw(): Promise<RawData> {
-  const [settings, entries, onlineSnap, weeksSnap] = await Promise.all([
+  const [settings, entries, invoices, onlineSnap, weeksSnap] = await Promise.all([
     getSettings(),
     listEntries(),
+    listInvoiceEntries(),
     db().collection("onlineWeekly").get(),
     db().collection("weeks").get(),
   ]);
@@ -96,7 +98,13 @@ export async function loadRaw(): Promise<RawData> {
   }
   const weekOverrides: Record<string, string | null> = {};
   for (const d of weeksSnap.docs) weekOverrides[d.id] = d.data().bookingMonthOverride ?? null;
-  return { settings, entries, online, weekOverrides };
+  return {
+    settings,
+    entries: [...entries, ...invoices.entries],
+    online,
+    weekOverrides,
+    notices: invoices.error ? [invoices.error] : [],
+  };
 }
 
 export async function audit(uid: string, email: string | undefined, action: string, detail: Record<string, unknown>) {

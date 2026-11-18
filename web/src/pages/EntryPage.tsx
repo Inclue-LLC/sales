@@ -2,7 +2,7 @@
 // 入力した金額は計上月ごとに 1ページ目（売上一覧）へ自動で反映される。
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listMonths } from "../../../functions/src/domain/period";
-import { Api, COUNTRIES, COUNTRY_LABELS, CURRENCY_LABELS, currencyOf, type Country, type Entry, type EntryInput, type EntryKind, type Settings } from "../api";
+import { Api, COUNTRIES, COUNTRY_LABELS, CURRENCY_LABELS, INVOICE_APP_URL, currencyOf, type Country, type Entry, type EntryInput, type EntryKind, type Settings } from "../api";
 import { MoneyInput } from "../components/MoneyInput";
 import { PageHeader } from "../components/PageHeader";
 import { useToast } from "../components/Toast";
@@ -224,25 +224,50 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
               </thead>
               <tbody>
                 {filtered.map((e) => (
-                  <tr key={e.id} className={editingId === e.id ? "editing" : ""}>
-                    <td className="nowrap">{monthLabel(e.month)}</td>
+                  <tr key={e.id} className={`${editingId === e.id ? "editing" : ""} ${e.source === "invoice" ? "from-invoice" : ""}`}>
+                    <td className="nowrap">
+                      {monthLabel(e.month)}
+                      {e.source === "invoice" && <small className="orig">支払期限の月</small>}
+                    </td>
                     <td>
                       <span className={`flag flag-${e.country}`}>{COUNTRY_LABELS[e.country]}</span>
                     </td>
-                    {config.fields.map((f) => (
-                      <td key={f.key}>{f.kind === "choice" ? <span className="tag">{e[f.key]}</span> : e[f.key]}</td>
+                    {config.fields.map((f, i) => (
+                      <td key={f.key}>
+                        {f.kind === "choice" ? <span className="tag">{e[f.key]}</span> : e[f.key]}
+                        {i === 0 && e.source === "invoice" && (
+                          <small className="orig">
+                            <span className="invoice-badge">請求書</span>
+                            {e.invoiceNumber}・{e.clientName}
+                          </small>
+                        )}
+                      </td>
                     ))}
                     <td className="num">
                       {num(e.amountCny)}元
                       {e.currency === "JPY" && <small className="orig">（{num(e.amount)}円）</small>}
                     </td>
                     <td className="row-actions">
-                      <button className="btn small" onClick={() => startEdit(e)}>
-                        編集
-                      </button>
-                      <button className="btn small danger" onClick={() => remove(e)}>
-                        削除
-                      </button>
+                      {e.source === "invoice" ? (
+                        <a
+                          className="btn small"
+                          href={`${INVOICE_APP_URL}/invoices/${e.invoiceId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="請求書から反映された売上は、請求書ツールで編集します"
+                        >
+                          請求書を開く ↗
+                        </a>
+                      ) : (
+                        <>
+                          <button className="btn small" onClick={() => startEdit(e)}>
+                            編集
+                          </button>
+                          <button className="btn small danger" onClick={() => remove(e)}>
+                            削除
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

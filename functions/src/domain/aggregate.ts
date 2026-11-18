@@ -23,6 +23,8 @@ export interface RawData {
   online: Map<string, Partial<Record<Channel, number>>>;
   /** weekStart → 手動の計上月 */
   weekOverrides: Record<string, string | null>;
+  /** 画面に出すお知らせ（請求書ツールを読み込めなかった など） */
+  notices?: string[];
 }
 
 const emptyMonths = (months: string[]) => Object.fromEntries(months.map((m) => [m, 0])) as Record<string, number>;
@@ -102,5 +104,5 @@ export function buildSummary(raw: RawData): Summary {
     target: sum(countryTotals.map((r) => r.target!), months),
     sales: sum(countryTotals.map((r) => r.sales), months),
   });
-  return { settings, months, rows };
+  return { notices: raw.notices ?? [], settings, months, rows };
 }

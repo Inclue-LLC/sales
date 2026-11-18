@@ -20,6 +20,7 @@ export {
   CURRENCY_LABELS,
   LICENSE_TYPES,
   OFFLINE_TYPES,
+  INVOICE_APP_URL,
   SHARED_LOGIN_EMAIL,
   currencyOf,
 } from "../../functions/src/domain/types";

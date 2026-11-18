@@ -8,7 +8,8 @@
     "test": "npm --prefix functions test",
     "build": "npm --prefix functions run build && npm --prefix web run build",
     "deploy": "node scripts/deploy.mjs",
-    "setup-firebase": "node scripts/setup-firebase.mjs"
+    "setup-firebase": "node scripts/setup-firebase.mjs",
+    "seed:invoices": "node scripts/seed-invoices.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

@@ -51,6 +51,11 @@ export interface EntryInput {
 export interface Entry extends EntryInput {
   id: string;
   kind: EntryKind;
+  /** 請求書ツールから反映されたもの（PL管理では編集できない） */
+  source?: "invoice";
+  invoiceId?: string;
+  invoiceNumber?: string;
+  clientName?: string;
   currency: Currency; // 入力した通貨（国で決まる）
   amountCny: number; // 元に換算した金額（一覧表示・集計用）
   createdAt: string;
@@ -131,6 +136,8 @@ export interface SummaryRow {
 }
 
 export interface Summary {
+  /** 請求書ツールを読み込めなかったときなどのお知らせ */
+  notices: string[];
   settings: Settings;
   months: string[];
   rows: SummaryRow[];
@@ -141,3 +148,6 @@ export interface Summary {
  * 実在しない（メールが届かない）アドレスで構わない。サーバーはこのアカウント以外を受け付けない。
  */
 export const SHARED_LOGIN_EMAIL = "login@sales.internal";
+
+/** 請求書ツール（帳票発行ツール）の URL。請求書から反映した行のリンクに使う */
+export const INVOICE_APP_URL = "https://inclue-invoice.web.app";

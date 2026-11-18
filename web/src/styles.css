@@ -858,3 +858,26 @@ table {
 .spacer {
   flex: 1;
 }
+
+.invoice-badge {
+  display: inline-block;
+  padding: 0 6px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: #ecfdf3;
+  color: #067647;
+  font-size: 11px;
+  font-weight: 600;
+}
+.notice {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fff7e6;
+  border: 1px solid #f5d9a8;
+  color: #8a5a00;
+  font-size: 13px;
+}
+a.btn {
+  text-decoration: none;
+}

@@ -9,6 +9,7 @@ import { buildOnline, buildSummary } from "./domain/aggregate";
 import { listWeeks } from "./domain/period";
 import { CHANNELS, SHARED_LOGIN_EMAIL, toCny, type Channel, type Entry } from "./domain/types";
 import * as V from "./domain/validate";
+import { listInvoiceEntries } from "./invoices";
 import * as repo from "./repo";
 
 initializeApp();
@@ -32,13 +33,15 @@ const handlers: Record<string, Handler> = {
 
   // ---- ライセンス／オフライン／その他 ----
   listEntries: async (p) => {
-    const [list, s] = await Promise.all([repo.listEntries(V.kind(p.kind)), repo.getSettings()]);
-    return list
+    const kind = V.kind(p.kind);
+    const [list, invoices, s] = await Promise.all([repo.listEntries(kind), listInvoiceEntries(), repo.getSettings()]);
+    return [...list, ...invoices.entries.filter((e) => e.kind === kind)]
       .map((e): Entry => ({ ...e, amountCny: toCny(e.amount, e.currency, s.jpyPerCny) }))
       .sort((a, b) => b.month.localeCompare(a.month) || b.createdAt.localeCompare(a.createdAt));
   },
 
   saveEntry: async (p, ctx) => {
+    if (String(p.id ?? "").startsWith("inv_")) throw new V.ValidationError("請求書から反映された売上は、請求書ツールで編集してください");
     const kind = V.kind(p.kind);
     const input = V.entry(kind, p.entry);
     if (p.id) {
@@ -54,6 +57,7 @@ const handlers: Record<string, Handler> = {
   },
 
   deleteEntry: async (p, ctx) => {
+    if (String(p.id ?? "").startsWith("inv_")) throw new V.ValidationError("請求書から反映された売上は、請求書ツールで削除・取消してください");
     const before = await repo.getEntry(String(p.id));
     if (!before) throw new HttpsError("not-found", "データが見つかりません");
     await repo.deleteEntry(before.id);

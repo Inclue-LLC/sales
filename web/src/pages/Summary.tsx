@@ -48,6 +48,11 @@ export default function SummaryPage() {
           </>
         }
       />
+      {data.notices.map((n) => (
+        <p key={n} className="notice">
+          {n}
+        </p>
+      ))}
       <div className="table-card" ref={scroller}>
         <table className="summary">
           <thead>

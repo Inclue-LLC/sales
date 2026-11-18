@@ -49,7 +49,7 @@
       "enabled": true,
       "port": 4100
     },
-    "singleProjectMode": true,
+    "singleProjectMode": false,
     "hub": {
       "port": 4500
     },
