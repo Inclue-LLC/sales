@@ -2,17 +2,17 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { Api } from "./api";
 import { AuthProvider, useAuth } from "./components/Auth";
+import { IconBriefcase, IconCalendar, IconChart, IconLogout, IconSettings } from "./components/Icons";
 import { ToastProvider } from "./components/Toast";
 import DealsPage from "./pages/Deals";
 import LoginPage from "./pages/Login";
-import MonthlyPlPage from "./pages/MonthlyPl";
+import DashboardPage from "./pages/Dashboard";
 import SettingsPage from "./pages/Settings";
 import WeeklyPage from "./pages/Weekly";
 
 function Shell() {
   const { user, ready, logout } = useAuth();
   const [access, setAccess] = useState<"checking" | "ok" | "denied">("checking");
-  const [menuOpen, setMenuOpen] = useState(false);
 
   // メンバー登録されているか確認（Auth にアカウントがあってもメンバーでなければ使えない）
   useEffect(() => {
@@ -36,37 +36,55 @@ function Shell() {
       </div>
     );
 
+  const nav = [
+    { to: "/pl", label: "ダッシュボード", icon: <IconChart /> },
+    { to: "/weekly", label: "オンライン週次", icon: <IconCalendar /> },
+    { to: "/deals", label: "ライセンス案件", icon: <IconBriefcase /> },
+    { to: "/settings", label: "設定", icon: <IconSettings /> },
+  ];
+
   return (
     <div className="app">
-      <header className="topbar">
-        <span className="brand">売上PL管理</span>
-        <button className="menu-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="メニュー">
-          ☰
-        </button>
-        <nav className={menuOpen ? "open" : ""} onClick={() => setMenuOpen(false)}>
-          <NavLink to="/pl">月次PL</NavLink>
-          <NavLink to="/weekly">オンライン週次</NavLink>
-          <NavLink to="/deals">ライセンス案件</NavLink>
-          <NavLink to="/settings">設定</NavLink>
-          <a className="nav-logout" onClick={logout}>
-            ログアウト
-          </a>
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark">PL</span>
+          <span>売上PL管理</span>
+        </div>
+        <nav>
+          {nav.map((n) => (
+            <NavLink key={n.to} to={n.to}>
+              {n.icon}
+              <span>{n.label}</span>
+            </NavLink>
+          ))}
         </nav>
-        <div className="spacer" />
-        <span className="user">{user.email}</span>
-        <button className="link" onClick={logout}>
-          ログアウト
-        </button>
-      </header>
+        <div className="sidebar-foot">
+          <div className="user" title={user.email ?? ""}>
+            <span className="avatar">{(user.email ?? "?").slice(0, 1).toUpperCase()}</span>
+            <span className="user-email">{user.email}</span>
+          </div>
+          <button className="icon-btn" onClick={logout} title="ログアウト" aria-label="ログアウト">
+            <IconLogout />
+          </button>
+        </div>
+      </aside>
       <main>
         <Routes>
-          <Route path="/pl" element={<MonthlyPlPage />} />
+          <Route path="/pl" element={<DashboardPage />} />
           <Route path="/weekly" element={<WeeklyPage />} />
           <Route path="/deals" element={<DealsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/pl" replace />} />
         </Routes>
       </main>
+      <nav className="tabbar">
+        {nav.map((n) => (
+          <NavLink key={n.to} to={n.to}>
+            {n.icon}
+            <span>{n.label.replace("オンライン", "")}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }

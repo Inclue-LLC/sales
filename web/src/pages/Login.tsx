@@ -24,6 +24,7 @@ export default function LoginPage() {
   return (
     <div className="login">
       <form className="card login-card" onSubmit={submit}>
+        <span className="brand-mark">PL</span>
         <h1>売上PL管理</h1>
         <label>
           メールアドレス

@@ -17,10 +17,11 @@ export const gridTheme = themeQuartz.withParams({
   headerHeight: 32,
   spacing: 6,
   cellHorizontalPadding: 8,
-  borderColor: "#d9dee5",
-  headerBackgroundColor: "#f1f4f8",
+  borderColor: "#e7e9f0",
   columnBorder: true,
-  wrapperBorderRadius: 6,
+  wrapperBorderRadius: 14,
+  wrapperBorder: false,
+  headerBackgroundColor: "#f8f9fc",
 });
 
 /**

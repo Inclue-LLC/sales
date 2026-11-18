@@ -1,56 +1,30 @@
-import type { CellValueChangedEvent, ColDef, ColGroupDef, GridApi } from "ag-grid-community";
-import { AgGridReact } from "ag-grid-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Api, downloadCsv, COUNTRY_LABELS, type Triple, type ValueField, type WeeklyView } from "../api";
+// オンライン週次。月を選び、週ごとのカードで日本・中国の金額を入力する。
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Api, COUNTRY_LABELS, downloadCsv, type Category, type ValueField, type WeeklyRow, type WeeklyView } from "../api";
+import { IconDownload } from "../components/Icons";
+import { MoneyInput } from "../components/MoneyInput";
+import { Segmented, loadPref, savePref } from "../components/Segmented";
 import { useToast } from "../components/Toast";
-import { dateLabel, monthLabel, parseAmount, yen } from "../format";
-import { gridTheme, handlePaste } from "../grid";
+import { dateLabel, monthLabel, yen } from "../format";
+import WeeklyGrid from "./WeeklyGrid";
 
+type View = "cards" | "table";
 const FIELDS: { key: ValueField; label: string }[] = [
   { key: "target", label: "目標" },
   { key: "plan", label: "予定" },
   { key: "paid", label: "入金済み" },
 ];
-const AUTO = "auto";
-
-interface Row {
-  key: string;
-  kind: "week" | "subtotal";
-  no?: number;
-  weekStart?: string;
-  weekEnd?: string;
-  autoMonth?: string;
-  overrideMonth?: string | null;
-  bookingMonth: string;
-  values: Record<string, Triple>;
-  total: Triple;
-}
-
-type Change = { weekStart: string; categoryId: string; field: ValueField; value: number };
-
-function toRows(v: WeeklyView): Row[] {
-  const rows: Row[] = [];
-  for (const g of v.groups) {
-    for (const w of g.weeks) rows.push({ ...w, key: w.weekStart, kind: "week" });
-    rows.push({
-      key: `sub-${g.month}`,
-      kind: "subtotal",
-      bookingMonth: g.month,
-      values: g.subtotal.values,
-      total: g.subtotal.total,
-    });
-  }
-  return rows;
-}
 
 export default function WeeklyPage() {
-  const [view, setView] = useState<WeeklyView | null>(null);
-  const [gridApi, setGridApi] = useState<GridApi<Row>>();
+  const [data, setData] = useState<WeeklyView | null>(null);
+  const [view, setView] = useState<View>(loadPref("weekly.view", "cards"));
+  const [params, setParams] = useSearchParams();
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
   const load = useCallback(() => {
-    Api.getWeekly().then(setView).catch((e) => toast.error(e.message));
+    Api.getWeekly().then(setData).catch((e) => toast.error(e.message));
   }, [toast]);
   useEffect(load, [load]);
 
@@ -58,7 +32,7 @@ export default function WeeklyPage() {
     async (p: Promise<WeeklyView>) => {
       setSaving(true);
       try {
-        setView(await p);
+        setData(await p);
       } catch (e) {
         toast.error((e as Error).message);
         load();
@@ -69,158 +43,167 @@ export default function WeeklyPage() {
     [load, toast],
   );
 
-  const rows = useMemo(() => (view ? toRows(view) : []), [view]);
+  if (!data) return <div className="page loading">読み込み中…</div>;
 
-  const columnDefs = useMemo<(ColDef<Row> | ColGroupDef<Row>)[]>(() => {
-    if (!view) return [];
-    const isWeek = (r?: Row) => r?.kind === "week";
-    const fixed: ColDef<Row>[] = [
-      {
-        headerName: "週",
-        field: "no",
-        pinned: "left",
-        width: 60,
-        valueFormatter: (p) => (isWeek(p.data) ? `第${p.value}週` : ""),
-      },
-      {
-        headerName: "週開始日（月）",
-        field: "weekStart",
-        pinned: "left",
-        width: 128,
-        valueFormatter: (p) => (p.value ? dateLabel(p.value) : "小計"),
-        cellClass: (p) => (isWeek(p.data) ? "" : "label-cell"),
-      },
-      {
-        headerName: "週終了日（日）",
-        field: "weekEnd",
-        width: 128,
-        valueFormatter: (p) => (p.value ? dateLabel(p.value) : ""),
-      },
-      {
-        headerName: "計上月",
-        colId: "bookingMonth",
-        width: 150,
-        editable: (p) => isWeek(p.data),
-        valueGetter: (p) => (isWeek(p.data) ? (p.data!.overrideMonth ?? AUTO) : p.data?.bookingMonth),
-        valueFormatter: (p) => {
-          const r = p.data;
-          // プルダウンの選択肢を表示するときは行データが無い
-          if (!r) return p.value === AUTO ? "自動判定" : monthLabel(String(p.value));
-          if (!isWeek(r)) return monthLabel(r.bookingMonth);
-          return r.overrideMonth ? `${monthLabel(r.overrideMonth)}（手動）` : `${monthLabel(r.autoMonth!)}（自動）`;
-        },
-        valueSetter: (p) => {
-          if (!p.data || p.newValue === p.oldValue) return false;
-          p.data.overrideMonth = p.newValue === AUTO ? null : p.newValue;
-          return true;
-        },
-        cellEditor: "agSelectCellEditor",
-        cellEditorParams: { values: [AUTO, ...view.months] },
-        cellClass: (p) => (isWeek(p.data) ? (p.data!.overrideMonth ? "cell-input overridden" : "cell-input") : ""),
-      },
-    ];
-
-    const amountCol = (
-      id: string,
-      f: ValueField,
-      get: (r: Row) => number,
-      editable: boolean,
-      last: boolean,
-    ): ColDef<Row> => ({
-      headerName: FIELDS.find((x) => x.key === f)!.label,
-      colId: `${id}:${f}`,
-      context: editable ? { categoryId: id, field: f } : undefined,
-      width: 108,
-      type: "rightAligned",
-      editable: (p) => editable && isWeek(p.data),
-      valueGetter: (p) => (p.data ? get(p.data) : 0),
-      valueFormatter: (p) => yen(p.value),
-      valueParser: (p) => parseAmount(p.newValue) ?? p.oldValue,
-      valueSetter: (p) => {
-        const v = parseAmount(p.newValue);
-        if (v === null || !p.data) return false;
-        p.data.values[id] = { ...p.data.values[id], [f]: v };
-        return true;
-      },
-      cellClass: (p) =>
-        [editable && isWeek(p.data) ? "cell-input" : "cell-auto", last ? "col-month-end" : ""].join(" "),
-    });
-
-    const countryGroups: ColGroupDef<Row>[] = view.categories.map((c) => ({
-      headerName: COUNTRY_LABELS[c.country],
-      headerClass: "month-header",
-      children: FIELDS.map((f, i) => amountCol(c.id, f.key, (r) => r.values[c.id]?.[f.key] ?? 0, true, i === 2)),
-    }));
-    const total: ColGroupDef<Row> = {
-      headerName: "合計",
-      headerClass: "month-header",
-      children: FIELDS.map((f, i) => amountCol("total", f.key, (r) => r.total[f.key], false, i === 2)),
-    };
-    return [...fixed, ...countryGroups, total];
-  }, [view]);
-
-  const onCellValueChanged = useCallback(
-    (e: CellValueChangedEvent<Row>) => {
-      if (!e.data.weekStart || e.oldValue === e.newValue) return;
-      if (e.colDef.colId === "bookingMonth") {
-        run(Api.setWeekBookingMonth(e.data.weekStart, e.newValue === AUTO ? null : e.newValue));
-        return;
-      }
-      const ctx = e.colDef.context as { categoryId: string; field: ValueField } | undefined;
-      if (!ctx) return;
-      run(
-        Api.saveWeeklyCells([{ weekStart: e.data.weekStart, categoryId: ctx.categoryId, field: ctx.field, value: e.newValue }]),
-      );
-    },
-    [run],
-  );
-
-  const onPaste = (e: React.ClipboardEvent) => {
-    const changes = handlePaste<Row, Change>(e, gridApi, (data, col, value) => {
-      const ctx = col.getColDef().context as { categoryId: string; field: ValueField } | undefined;
-      if (!ctx || data.kind !== "week" || !data.weekStart) return null;
-      return { weekStart: data.weekStart, categoryId: ctx.categoryId, field: ctx.field, value };
-    });
-    if (changes && changes.length) run(Api.saveWeeklyCells(changes));
-  };
+  const now = new Date().toISOString().slice(0, 7);
+  const qm = params.get("month");
+  const month = qm && data.months.includes(qm) ? qm : data.months.includes(now) ? now : data.months[0];
+  const group = data.groups.find((g) => g.month === month)!;
 
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>オンライン週次</h1>
-        <span className="muted">単位：{view?.settings.currencyLabel ?? "円"}</span>
-        <span className="legend">
-          <i className="swatch input" />
-          入力
-          <i className="swatch auto" />
-          自動計算
-        </span>
-        <span className={`saving ${saving ? "on" : ""}`}>保存中…</span>
-        <div className="spacer" />
-        <button onClick={() => downloadCsv("weekly").catch((e) => toast.error(e.message))}>CSV出力</button>
-      </div>
-      <p className="hint">
-        計上月は「週の木曜日が属する月」で自動判定されます。計上月セルをダブルクリックすると変更できます。
-        ここで入力した値は計上月ごとに月次PLの「商品販売 オンライン」へ集計されます。
-      </p>
-      <div className="grid-wrap" onPaste={onPaste}>
-        {view ? (
-          <AgGridReact<Row>
-            theme={gridTheme}
-            rowData={rows}
-            columnDefs={columnDefs}
-            getRowId={(p) => p.data.key}
-            getRowClass={(p) => (p.data?.kind === "subtotal" ? "row-auto row-subtotal row-month-end" : "")}
-            onGridReady={(e) => setGridApi(e.api)}
-            onCellValueChanged={onCellValueChanged}
-            enterNavigatesVerticallyAfterEdit
-            stopEditingWhenCellsLoseFocus
-            defaultColDef={{ sortable: false, resizable: true, suppressMovable: true }}
+      <header className="page-head">
+        <div>
+          <h1>オンライン週次</h1>
+          <p className="sub">
+            週ごとに入力した金額が、計上月ごとに「商品販売 オンライン」へ集計されます・単位：{data.settings.currencyLabel}
+            <span className={`saving ${saving ? "on" : ""}`}>保存中…</span>
+          </p>
+        </div>
+        <div className="head-actions">
+          <Segmented<View>
+            value={view}
+            options={[
+              { value: "cards", label: "カード" },
+              { value: "table", label: "表で編集" },
+            ]}
+            onChange={(v) => {
+              setView(v);
+              savePref("weekly.view", v);
+            }}
           />
-        ) : (
-          <div className="loading">読み込み中…</div>
-        )}
-      </div>
+          <button className="btn ghost" onClick={() => downloadCsv("weekly").catch((e) => toast.error(e.message))}>
+            <IconDownload size={16} />
+            CSV
+          </button>
+        </div>
+      </header>
+
+      {view === "table" ? (
+        <>
+          <p className="hint">計上月セルをダブルクリックすると変更できます。黄色のセルに入力できます（Excel からの貼り付け可）。</p>
+          <WeeklyGrid view={data} run={run} />
+        </>
+      ) : (
+        <div className="stack">
+          <nav className="month-tabs" aria-label="計上月">
+            {data.groups.map((g) => (
+              <button
+                key={g.month}
+                className={g.month === month ? "on" : ""}
+                onClick={() => setParams({ month: g.month }, { replace: true })}
+              >
+                <span>{monthLabel(g.month)}</span>
+                <small>{yen(g.subtotal.total.paid)}</small>
+              </button>
+            ))}
+          </nav>
+
+          <section className="card month-summary">
+            <div className="card-head">
+              <h2>{monthLabel(month)}の合計</h2>
+              <span className="sub">{group.weeks.length}週</span>
+            </div>
+            <div className="summary-grid">
+              {data.categories.map((c) => (
+                <SummaryBlock key={c.id} title={COUNTRY_LABELS[c.country]} v={group.subtotal.values[c.id]} />
+              ))}
+              <SummaryBlock title="合計" v={group.subtotal.total} strong />
+            </div>
+          </section>
+
+          {group.weeks.length === 0 && <p className="empty">この月に計上される週はありません。</p>}
+          <div className="week-list">
+            {group.weeks.map((w) => (
+              <WeekCard key={w.weekStart} week={w} categories={data.categories} months={data.months} run={run} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function SummaryBlock(props: { title: string; v: { target: number; plan: number; paid: number }; strong?: boolean }) {
+  return (
+    <div className={`summary-block ${props.strong ? "strong" : ""}`}>
+      <h3>{props.title}</h3>
+      <dl>
+        {FIELDS.map((f) => (
+          <div key={f.key}>
+            <dt>{f.label}</dt>
+            <dd>{yen(props.v[f.key])}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function WeekCard(props: {
+  week: WeeklyRow;
+  categories: Category[];
+  months: string[];
+  run: (p: Promise<WeeklyView>) => void;
+}) {
+  const w = props.week;
+  const short = (d: string) => dateLabel(d).replace(/^\d{4}\//, "");
+  return (
+    <article className="card week-card">
+      <div className="week-head">
+        <div>
+          <h3>第{w.no}週</h3>
+          <span className="sub">
+            {short(w.weekStart)} 〜 {short(w.weekEnd)}
+          </span>
+        </div>
+        <label className="booking">
+          <span>計上月</span>
+          <select
+            value={w.overrideMonth ?? ""}
+            onChange={(e) => props.run(Api.setWeekBookingMonth(w.weekStart, e.target.value || null))}
+          >
+            <option value="">自動（{monthLabel(w.autoMonth)}）</option>
+            {props.months.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
+          {w.overrideMonth && <span className="badge">手動</span>}
+        </label>
+      </div>
+      <div className="week-body">
+        <div className="week-row week-row-head" aria-hidden>
+          <span />
+          {FIELDS.map((f) => (
+            <span key={f.key}>{f.label}</span>
+          ))}
+        </div>
+        {props.categories.map((c) => (
+          <div key={c.id} className="week-row">
+            <span className="week-country">{COUNTRY_LABELS[c.country]}</span>
+            {FIELDS.map((f) => (
+              <MoneyInput
+                key={f.key}
+                label={`${COUNTRY_LABELS[c.country]} ${f.label}`}
+                value={w.values[c.id]?.[f.key] ?? 0}
+                onCommit={(v) =>
+                  props.run(Api.saveWeeklyCells([{ weekStart: w.weekStart, categoryId: c.id, field: f.key, value: v }]))
+                }
+              />
+            ))}
+          </div>
+        ))}
+        <div className="week-row week-total">
+          <span className="week-country">合計</span>
+          {FIELDS.map((f) => (
+            <span key={f.key} className="num">
+              {yen(w.total[f.key])}
+            </span>
+          ))}
+        </div>
+      </div>
+    </article>
   );
 }

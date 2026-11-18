@@ -44,9 +44,15 @@ export default function SettingsPage() {
 
   return (
     <div className="page page-scroll">
-      <div className="page-head">
-        <h1>設定</h1>
-      </div>
+      <header className="page-head">
+        <div>
+          <h1>設定</h1>
+          <p className="sub">期間・候補マスタ・メンバーを管理します</p>
+        </div>
+        <div className="head-actions mobile-only">
+          <LogoutButton />
+        </div>
+      </header>
       <form className="card" onSubmit={save}>
         <h2>期間・表示</h2>
         <div className="form-grid">
@@ -86,6 +92,15 @@ export default function SettingsPage() {
       </form>
       <MembersCard />
     </div>
+  );
+}
+
+function LogoutButton() {
+  const { logout } = useAuth();
+  return (
+    <button className="btn" onClick={logout}>
+      ログアウト
+    </button>
   );
 }
 

@@ -12,6 +12,8 @@ import {
   type DealInput,
   type Masters,
 } from "../api";
+import { IconDownload, IconPlus, IconSearch } from "../components/Icons";
+import { Segmented, loadPref, savePref } from "../components/Segmented";
 import { useToast } from "../components/Toast";
 import { yen } from "../format";
 import { gridTheme } from "../grid";
@@ -67,6 +69,8 @@ export default function DealsPage() {
   const [fCountry, setFCountry] = useState(new Set<Country>());
   const [fChar, setFChar] = useState(new Set<string>());
   const [fStatus, setFStatus] = useState(new Set<string>());
+  const [q, setQ] = useState("");
+  const [view, setView] = useState<"cards" | "table">(loadPref("deals.view", "cards"));
   const toast = useToast();
 
   const load = useCallback(() => {
@@ -91,9 +95,14 @@ export default function DealsPage() {
         (d) =>
           (fCountry.size === 0 || fCountry.has(d.country)) &&
           (fChar.size === 0 || fChar.has(d.character)) &&
-          (fStatus.size === 0 || fStatus.has(d.status)),
+          (fStatus.size === 0 || fStatus.has(d.status)) &&
+          (q.trim() === "" ||
+            [d.licensee, d.title, d.character, d.productCategory, d.contractType, d.owner, d.note]
+              .join(" ")
+              .toLowerCase()
+              .includes(q.trim().toLowerCase())),
       ),
-    [deals, fCountry, fChar, fStatus],
+    [deals, fCountry, fChar, fStatus, q],
   );
 
   const columnDefs = useMemo<ColDef<Deal>[]>(
@@ -134,45 +143,82 @@ export default function DealsPage() {
     [],
   );
 
+  const openDeal = (d: Deal) => {
+    const { id, no, createdAt: _c, updatedAt: _u, ...input } = d;
+    setEditing({ id, no, input });
+  };
+
   return (
     <div className="page">
-      <div className="page-head">
-        <h1>ライセンス案件一覧</h1>
-        <span className="muted">
-          {filtered.length} / {deals?.length ?? 0} 件
-        </span>
-        <div className="spacer" />
-        <button onClick={() => downloadCsv("deals").catch((e) => toast.error(e.message))}>CSV出力</button>
-        <button className="primary" onClick={() => setEditing({ input: { ...EMPTY } })}>
-          ＋ 新規追加
-        </button>
-      </div>
-      <div className="filters">
-        <FilterChips label="国" options={COUNTRIES} selected={fCountry} onChange={setFCountry} render={(c) => COUNTRY_LABELS[c]} />
-        <FilterChips label="キャラクター" options={characters} selected={fChar} onChange={setFChar} />
-        <FilterChips label="ステータス" options={[...DEAL_STATUSES]} selected={fStatus} onChange={setFStatus} />
-      </div>
-      <p className="hint">行をクリックすると編集できます。列見出しをクリックすると並べ替えます。</p>
-      <div className="grid-wrap">
-        {deals ? (
+      <header className="page-head">
+        <div>
+          <h1>ライセンス案件</h1>
+          <p className="sub">
+            {filtered.length === (deals?.length ?? 0) ? `${filtered.length}件` : `${filtered.length}件 / 全${deals?.length ?? 0}件`}
+          </p>
+        </div>
+        <div className="head-actions">
+          <Segmented<"cards" | "table">
+            value={view}
+            options={[
+              { value: "cards", label: "カード" },
+              { value: "table", label: "一覧表" },
+            ]}
+            onChange={(v) => {
+              setView(v);
+              savePref("deals.view", v);
+            }}
+          />
+          <button className="btn ghost" onClick={() => downloadCsv("deals").catch((e) => toast.error(e.message))}>
+            <IconDownload size={16} />
+            CSV
+          </button>
+          <button className="btn primary" onClick={() => setEditing({ input: { ...EMPTY } })}>
+            <IconPlus size={16} />
+            案件を追加
+          </button>
+        </div>
+      </header>
+
+      <section className="card filter-card">
+        <div className="search">
+          <IconSearch size={16} />
+          <input placeholder="ライセンシー・案件名・担当などで検索" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div className="filters">
+          <FilterChips label="国" options={COUNTRIES} selected={fCountry} onChange={setFCountry} render={(c) => COUNTRY_LABELS[c]} />
+          <FilterChips label="キャラクター" options={characters} selected={fChar} onChange={setFChar} />
+          <FilterChips label="ステータス" options={[...DEAL_STATUSES]} selected={fStatus} onChange={setFStatus} />
+        </div>
+      </section>
+
+      {!deals ? (
+        <div className="loading">読み込み中…</div>
+      ) : view === "table" ? (
+        <div className="grid-card">
           <AgGridReact<Deal>
             theme={gridTheme}
             rowData={filtered}
             columnDefs={columnDefs}
             getRowId={(p) => p.data.id}
-            onRowClicked={(e) => {
-              if (!e.data) return;
-              const { id, no, createdAt: _c, updatedAt: _u, ...input } = e.data;
-              setEditing({ id, no, input });
-            }}
+            onRowClicked={(e) => e.data && openDeal(e.data)}
             rowClass="clickable"
             defaultColDef={{ sortable: true, resizable: true }}
             tooltipShowDelay={300}
           />
-        ) : (
-          <div className="loading">読み込み中…</div>
-        )}
-      </div>
+        </div>
+      ) : filtered.length === 0 ? (
+        <p className="empty">条件に合う案件はありません。</p>
+      ) : (
+        <div className="deal-grid">
+          {[...filtered]
+            .sort((a, b) => b.no - a.no)
+            .map((d) => (
+              <DealCard key={d.id} d={d} onClick={() => openDeal(d)} />
+            ))}
+        </div>
+      )}
+
       {editing && (
         <DealForm
           initial={editing}
@@ -185,6 +231,42 @@ export default function DealsPage() {
         />
       )}
     </div>
+  );
+}
+
+function DealCard({ d, onClick }: { d: Deal; onClick: () => void }) {
+  const period = d.startDate || d.endDate ? `${d.startDate ?? "?"} 〜 ${d.endDate ?? "?"}` : null;
+  return (
+    <button className="card deal-card" onClick={onClick}>
+      <div className="deal-top">
+        <span className={`status status-${DEAL_STATUSES.indexOf(d.status)}`}>{d.status}</span>
+        <span className="deal-no">
+          No.{d.no}・{COUNTRY_LABELS[d.country]}
+        </span>
+      </div>
+      <div className="deal-licensee">{d.licensee || "（ライセンシー未入力）"}</div>
+      <div className="deal-title">{d.title || "—"}</div>
+      <div className="deal-tags">
+        {d.character && <span className="tag">{d.character}</span>}
+        {d.contractType && <span className="tag">{d.contractType}</span>}
+        {d.productCategory && <span className="tag">{d.productCategory}</span>}
+      </div>
+      <dl className="deal-meta">
+        <div>
+          <dt>MG・契約金額</dt>
+          <dd>{d.amount === null ? "—" : `¥${yen(d.amount)}`}</dd>
+        </div>
+        <div>
+          <dt>ロイヤリティ</dt>
+          <dd>{d.royaltyRate === null ? "—" : `${d.royaltyRate}%`}</dd>
+        </div>
+        <div>
+          <dt>担当</dt>
+          <dd>{d.owner || "—"}</dd>
+        </div>
+      </dl>
+      {period && <div className="deal-period">契約期間 {period}</div>}
+    </button>
   );
 }
 
@@ -322,15 +404,15 @@ function DealForm(props: {
         </div>
         <div className="modal-actions">
           {!isNew && (
-            <button type="button" className="danger" onClick={remove} disabled={busy}>
+            <button type="button" className="btn danger" onClick={remove} disabled={busy}>
               削除
             </button>
           )}
           <div className="spacer" />
-          <button type="button" onClick={props.onClose} disabled={busy}>
+          <button type="button" className="btn" onClick={props.onClose} disabled={busy}>
             キャンセル
           </button>
-          <button type="submit" className="primary" disabled={busy}>
+          <button type="submit" className="btn primary" disabled={busy}>
             {isNew ? "追加" : "保存"}
           </button>
         </div>
