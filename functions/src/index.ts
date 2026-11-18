@@ -3,6 +3,7 @@
 
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { buildOnline, buildSummary } from "./domain/aggregate";
@@ -13,6 +14,9 @@ import { listInvoiceEntries } from "./invoices";
 import * as repo from "./repo";
 
 initializeApp();
+// 項目のない値（例：オフラインの「案件内容」）は保存時に無視する。
+// これがないと、編集・削除時の変更履歴の保存でエラーになる。
+getFirestore().settings({ ignoreUndefinedProperties: true });
 setGlobalOptions({ region: "asia-northeast1", maxInstances: 5 });
 
 type Ctx = { uid: string; email?: string };
