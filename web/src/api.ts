@@ -20,11 +20,23 @@ const call = useEmulators
   ? httpsCallableFromURL<Req, unknown>(functions, `${window.location.origin}/__fn/demo-sales-pl/asia-northeast1/api`)
   : httpsCallable<Req, unknown>(functions, "api");
 
+/** Firebase のエラーを分かる言葉に（サーバーからの日本語メッセージはそのまま） */
+function friendly(e: unknown): string {
+  const code = (e as { code?: string })?.code ?? "";
+  const msg = e instanceof Error ? e.message : String(e);
+  if (code === "functions/internal" && /^internal$/i.test(msg))
+    return "サーバーに接続できません。しばらくしてから再読み込みしてください（続く場合は管理者に連絡してください）";
+  if (code === "functions/unavailable" || code === "functions/deadline-exceeded")
+    return "サーバーが混み合っているか、通信が切れました。もう一度お試しください";
+  if (code === "functions/unauthenticated") return "ログインし直してください";
+  return msg;
+}
+
 async function api<T>(action: string, payload?: unknown): Promise<T> {
   try {
     return (await call({ action, payload })).data as T;
   } catch (e) {
-    throw new Error(e instanceof Error ? e.message : String(e));
+    throw new Error(friendly(e));
   }
 }
 
