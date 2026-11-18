@@ -1,0 +1,17 @@
+{
+  "name": "sales-pl",
+  "private": true,
+  "scripts": {
+    "setup": "npm install && npm --prefix functions install && npm --prefix web install",
+    "dev": "npm --prefix functions run build && node scripts/ensure-dir.mjs emulator-data && concurrently -k -n fn,emu,web -c blue,magenta,green \"npm --prefix functions run build:watch\" \"firebase emulators:start --import=./emulator-data --export-on-exit\" \"npm --prefix web run dev\"",
+    "seed": "node scripts/seed.mjs",
+    "create-member": "node scripts/create-member.mjs",
+    "test": "npm --prefix functions test",
+    "build": "npm --prefix functions run build && npm --prefix web run build",
+    "deploy": "firebase deploy"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "firebase-tools": "^14.11.0"
+  }
+}
