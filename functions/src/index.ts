@@ -143,17 +143,23 @@ const handlers: Record<string, Handler> = {
 
 export const api = onCall(async (req: CallableRequest<{ action?: string; payload?: Record<string, unknown> }>) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "ログインしてください");
-  if (!(await repo.isMember(req.auth.uid))) throw new HttpsError("permission-denied", "このアカウントには利用権限がありません");
-  const handler = handlers[req.data?.action ?? ""];
-  if (!handler) throw new HttpsError("invalid-argument", `不明な操作です: ${req.data?.action}`);
+  const action = req.data?.action ?? "";
   try {
+    if (!(await repo.isMember(req.auth.uid))) throw new HttpsError("permission-denied", "このアカウントには利用権限がありません");
+    const handler = handlers[action];
+    if (!handler) throw new HttpsError("invalid-argument", `不明な操作です: ${action}`);
     return await handler(req.data.payload ?? {}, { uid: req.auth.uid, email: req.auth.token.email });
   } catch (e) {
     if (e instanceof V.ValidationError) throw new HttpsError("invalid-argument", e.message);
     if (e instanceof HttpsError) throw e;
     if ((e as { code?: string }).code === "auth/email-already-exists")
       throw new HttpsError("already-exists", "このメールアドレスは登録済みです");
-    console.error(e);
+    // 権限不足（データベースを作っていない・サービスアカウントにロールが無い など）はログで分かるようにする
+    console.error(`api action=${action} failed`, e);
+    const grpc = (e as { code?: number }).code;
+    if (grpc === 7)
+      throw new HttpsError("internal", "サーバーにデータベースへのアクセス権がありません（サービスアカウントのロールを確認してください）");
+    if (grpc === 5) throw new HttpsError("internal", "データベースが見つかりません（Firestore を作成したか確認してください）");
     throw new HttpsError("internal", "サーバーでエラーが発生しました");
   }
 });
