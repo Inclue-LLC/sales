@@ -1,19 +1,19 @@
 import { httpsCallable, httpsCallableFromURL } from "firebase/functions";
 import type {
-  Deal,
-  DealInput,
-  Masters,
+  Channel,
+  Entry,
+  EntryInput,
+  EntryKind,
   Member,
-  MonthlyPl,
+  OnlineView,
   Settings,
-  ValueField,
-  WeeklyView,
+  Summary,
 } from "../../functions/src/domain/types";
 import { functions, useEmulators } from "./firebase";
 
 export type * from "../../functions/src/domain/types";
 // 定数は functions と共有（types.ts は依存のない純粋なモジュール）
-export { COUNTRY_LABELS, DEAL_STATUSES, DEFAULT_MASTERS } from "../../functions/src/domain/types";
+export { CHANNELS, COUNTRIES, COUNTRY_LABELS, LICENSE_TYPES, OFFLINE_TYPES } from "../../functions/src/domain/types";
 
 type Req = { action: string; payload?: unknown };
 const call = useEmulators
@@ -22,58 +22,46 @@ const call = useEmulators
 
 async function api<T>(action: string, payload?: unknown): Promise<T> {
   try {
-    const res = await call({ action, payload });
-    return res.data as T;
+    return (await call({ action, payload })).data as T;
   } catch (e) {
-    throw new Error(errorMessage(e));
+    throw new Error(e instanceof Error ? e.message : String(e));
   }
 }
 
-export function errorMessage(e: unknown): string {
-  if (e && typeof e === "object" && "message" in e) return String((e as Error).message);
-  return String(e);
-}
+export type CsvKind = "summary" | "online" | EntryKind;
 
 export const Api = {
-  getMonthlyPl: () => api<MonthlyPl>("getMonthlyPl"),
-  saveMonthlyCells: (changes: Array<{ categoryId: string; month: string; field: ValueField; value: number }>) =>
-    api<MonthlyPl>("saveMonthlyCells", { changes }),
+  getSummary: () => api<Summary>("getSummary"),
+  saveTargets: (changes: { lineId: string; month: string; value: number }[]) => api<Summary>("saveTargets", { changes }),
 
-  getWeekly: () => api<WeeklyView>("getWeekly"),
-  saveWeeklyCells: (changes: Array<{ weekStart: string; categoryId: string; field: ValueField; value: number }>) =>
-    api<WeeklyView>("saveWeeklyCells", { changes }),
-  setWeekBookingMonth: (weekStart: string, month: string | null) =>
-    api<WeeklyView>("setWeekBookingMonth", { weekStart, month }),
+  listEntries: (kind: EntryKind) => api<Entry[]>("listEntries", { kind }),
+  saveEntry: (kind: EntryKind, entry: EntryInput, id?: string) => api<Entry>("saveEntry", { kind, entry, id }),
+  deleteEntry: (id: string) => api<{ ok: true }>("deleteEntry", { id }),
 
-  listDeals: () => api<Deal[]>("listDeals"),
-  saveDeal: (deal: DealInput, id?: string) => api<Deal>("saveDeal", { deal, id }),
-  deleteDeal: (id: string) => api<{ ok: true }>("deleteDeal", { id }),
+  getOnline: () => api<OnlineView>("getOnline"),
+  saveOnline: (changes: { weekStart: string; channel: Channel; value: number }[]) => api<OnlineView>("saveOnline", { changes }),
+  setWeekBookingMonth: (weekStart: string, month: string | null) => api<OnlineView>("setWeekBookingMonth", { weekStart, month }),
 
-  getSettings: () => api<{ settings: Settings; masters: Masters }>("getSettings"),
-  saveSettings: (settings: Settings, masters: Masters) =>
-    api<{ settings: Settings; masters: Masters }>("saveSettings", { settings, masters }),
+  getSettings: () => api<Settings>("getSettings"),
+  saveSettings: (settings: Settings) => api<Settings>("saveSettings", { settings }),
 
   listMembers: () => api<Member[]>("listMembers"),
-  createMember: (email: string, password: string, displayName: string) =>
-    api<Member>("createMember", { email, password, displayName }),
+  createMember: (email: string, password: string, displayName: string) => api<Member>("createMember", { email, password, displayName }),
   resetMemberPassword: (uid: string, password: string) => api<{ ok: true }>("resetMemberPassword", { uid, password }),
   deleteMember: (uid: string) => api<{ ok: true }>("deleteMember", { uid }),
 
-  exportCsv: (kind: "monthly" | "weekly" | "deals") =>
-    api<{ filename: string; content: string }>("exportCsv", { kind }),
+  exportCsv: (kind: CsvKind) => api<{ filename: string; content: string }>("exportCsv", { kind }),
 };
 
 /** CSV をダウンロードする（サーバーで BOM 付き UTF-8 を生成済み） */
-export async function downloadCsv(kind: "monthly" | "weekly" | "deals") {
+export async function downloadCsv(kind: CsvKind) {
   const { filename, content } = await Api.exportCsv(kind);
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  // すぐに revoke するとファイル名が失われるブラウザがあるので少し待つ
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

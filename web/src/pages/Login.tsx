@@ -35,7 +35,7 @@ export default function LoginPage() {
           <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         {error && <p className="error">{error}</p>}
-        <button type="submit" className="primary" disabled={busy}>
+        <button type="submit" className="btn primary" disabled={busy}>
           ログイン
         </button>
         <p className="hint">パスワードを忘れた場合は、他のメンバーに「設定 &gt; メンバー」から再設定してもらってください。</p>

@@ -1,0 +1,30 @@
+import { LICENSE_TYPES, OFFLINE_TYPES } from "../api";
+import type { EntryPageConfig } from "./EntryPage";
+
+export const licenseConfig: EntryPageConfig = {
+  kind: "license",
+  title: "ライセンス",
+  description: "ライセンス案件の売上を入力します。計上月ごとに売上一覧の「ライセンス」へ反映されます。",
+  fields: [
+    { key: "character", label: "キャラクター", kind: "character" },
+    { key: "type", label: "種別", kind: "choice", options: LICENSE_TYPES },
+  ],
+};
+
+export const offlineConfig: EntryPageConfig = {
+  kind: "offline",
+  title: "オフライン",
+  description: "POP UP・委託販売の売上を入力します。計上月ごとに売上一覧の「オフライン」へ反映されます。",
+  fields: [
+    { key: "character", label: "キャラクター", kind: "character" },
+    { key: "type", label: "種別", kind: "choice", options: OFFLINE_TYPES },
+    { key: "venue", label: "お店・イベント名", kind: "text", placeholder: "例：渋谷PARCO" },
+  ],
+};
+
+export const otherConfig: EntryPageConfig = {
+  kind: "other",
+  title: "その他",
+  description: "上記以外の売上を入力します。計上月ごとに売上一覧の「その他」へ反映されます。",
+  fields: [{ key: "content", label: "案件内容", kind: "text", placeholder: "例：イラスト制作費", wide: true }],
+};

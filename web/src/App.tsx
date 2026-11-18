@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { Api } from "./api";
 import { AuthProvider, useAuth } from "./components/Auth";
-import { IconBriefcase, IconCalendar, IconChart, IconLogout, IconSettings } from "./components/Icons";
+import { IconBag, IconBriefcase, IconDots, IconLogout, IconSettings, IconStore, IconTable } from "./components/Icons";
 import { ToastProvider } from "./components/Toast";
-import DealsPage from "./pages/Deals";
 import LoginPage from "./pages/Login";
-import DashboardPage from "./pages/Dashboard";
+import EntryPage from "./pages/EntryPage";
+import OnlinePage from "./pages/Online";
+import SummaryPage from "./pages/Summary";
+import { licenseConfig, offlineConfig, otherConfig } from "./pages/configs";
 import SettingsPage from "./pages/Settings";
-import WeeklyPage from "./pages/Weekly";
 
 function Shell() {
   const { user, ready, logout } = useAuth();
@@ -37,10 +38,12 @@ function Shell() {
     );
 
   const nav = [
-    { to: "/pl", label: "ダッシュボード", icon: <IconChart /> },
-    { to: "/weekly", label: "オンライン週次", icon: <IconCalendar /> },
-    { to: "/deals", label: "ライセンス案件", icon: <IconBriefcase /> },
-    { to: "/settings", label: "設定", icon: <IconSettings /> },
+    { to: "/summary", label: "売上一覧", short: "一覧", icon: <IconTable /> },
+    { to: "/license", label: "ライセンス", short: "ライセンス", icon: <IconBriefcase /> },
+    { to: "/online", label: "中国オンライン", short: "オンライン", icon: <IconBag /> },
+    { to: "/offline", label: "オフライン", short: "オフライン", icon: <IconStore /> },
+    { to: "/other", label: "その他", short: "その他", icon: <IconDots /> },
+    { to: "/settings", label: "設定", short: "設定", icon: <IconSettings /> },
   ];
 
   return (
@@ -70,18 +73,20 @@ function Shell() {
       </aside>
       <main>
         <Routes>
-          <Route path="/pl" element={<DashboardPage />} />
-          <Route path="/weekly" element={<WeeklyPage />} />
-          <Route path="/deals" element={<DealsPage />} />
+          <Route path="/summary" element={<SummaryPage />} />
+          <Route path="/license" element={<EntryPage key="license" config={licenseConfig} />} />
+          <Route path="/online" element={<OnlinePage />} />
+          <Route path="/offline" element={<EntryPage key="offline" config={offlineConfig} />} />
+          <Route path="/other" element={<EntryPage key="other" config={otherConfig} />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/pl" replace />} />
+          <Route path="*" element={<Navigate to="/summary" replace />} />
         </Routes>
       </main>
       <nav className="tabbar">
         {nav.map((n) => (
           <NavLink key={n.to} to={n.to}>
             {n.icon}
-            <span>{n.label.replace("オンライン", "")}</span>
+            <span>{n.short}</span>
           </NavLink>
         ))}
       </nav>

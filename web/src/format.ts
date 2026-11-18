@@ -33,3 +33,9 @@ export function dateLabel(d: string): string {
   const w = "日月火水木金土"[dt.getUTCDay()];
   return `${dt.getUTCFullYear()}/${dt.getUTCMonth() + 1}/${dt.getUTCDate()}(${w})`;
 }
+
+/** 今日を含む月。期間外なら期間の最初の月 */
+export function defaultMonth(months: string[]): string {
+  const now = new Date().toISOString().slice(0, 7);
+  return months.includes(now) ? now : months[0];
+}

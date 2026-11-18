@@ -18,86 +18,47 @@ try {
   user = await auth.createUser({ email, password: "password123", displayName: "デモユーザー" });
 }
 await db.doc(`members/${user.uid}`).set({ email, displayName: "デモユーザー" });
+await db.doc("settings/app").set({
+  startMonth: "2026-11",
+  endMonth: "2027-12",
+  currencyLabel: "円",
+  characters: ["スタジオハヌル", "Lovely MongMong", "ふにゅ"],
+});
 
-await db.doc("settings/app").set({ startMonth: "2026-11", endMonth: "2027-12", currencyLabel: "円" });
+// 既存のサンプルを消してから入れ直す
+for (const col of ["entries", "targets", "onlineWeekly", "weeks"]) {
+  const snap = await db.collection(col).get();
+  const b = db.batch();
+  snap.docs.forEach((d) => b.delete(d.ref));
+  await b.commit();
+}
 
 const batch = db.batch();
-const months = ["2026-11", "2026-12", "2027-01"];
-months.forEach((m, i) => {
-  const k = i + 1;
-  const put = (cat, t, p, pd) =>
-    batch.set(db.doc(`monthlyEntries/${cat}_${m}`), {
-      categoryId: cat,
-      month: m,
-      currency: "JPY",
-      target: t,
-      plan: p,
-      paid: pd,
-    });
-  put("JP_LICENSE", 1_000_000 * k, 900_000 * k, i === 0 ? 900_000 : 0);
-  put("JP_OFFLINE", 300_000, 250_000, i === 0 ? 240_000 : 0);
-  put("JP_OTHER", 50_000, 0, 0);
-  put("CN_LICENSE", 500_000, 400_000, 0);
-  put("CN_OFFLINE", 100_000, 80_000, 0);
-});
-const weeks = ["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30", "2026-12-07"];
-weeks.forEach((w, i) => {
-  for (const [cat, base] of [
-    ["JP_ONLINE", 120_000],
-    ["CN_ONLINE", 60_000],
-  ]) {
-    batch.set(db.doc(`weeklyEntries/${w}_${cat}`), {
-      categoryId: cat,
-      weekStart: w,
-      currency: "JPY",
-      target: base,
-      plan: base - 10_000 * (i % 3),
-      paid: i < 2 ? base - 15_000 : 0,
-    });
-  }
-});
-await batch.commit();
+const now = new Date();
+const entry = (kind, e) => batch.set(db.collection("entries").doc(), { kind, currency: "JPY", createdAt: now, updatedAt: now, ...e });
 
-const deals = [
-  {
-    country: "JP",
-    character: "スタジオハヌル",
-    licensee: "株式会社サンプル雑貨",
-    title: "アクリルスタンド",
-    productCategory: "雑貨",
-    contractType: "ロイヤリティ",
-    status: "進行中",
-    startDate: "2026-10-01",
-    endDate: "2027-09-30",
-    royaltyRate: 8,
-    amount: null,
-    owner: "佐藤",
-    note: "",
-  },
-  {
-    country: "CN",
-    character: "Lovely MongMong",
-    licensee: "上海サンプル文化",
-    title: "POP UP ストア",
-    productCategory: "イベント",
-    contractType: "POP UP",
-    status: "交渉中",
-    startDate: null,
-    endDate: null,
-    royaltyRate: null,
-    amount: 2_000_000,
-    owner: "鈴木",
-    note: "2027年春開催予定",
-  },
-];
-const existing = await db.collection("deals").limit(1).get();
-if (existing.empty) {
-  let no = 0;
-  for (const d of deals) {
-    no++;
-    await db.collection("deals").add({ ...d, no, createdAt: new Date(), updatedAt: new Date() });
-  }
-  await db.doc("counters/deals").set({ last: no });
+entry("license", { country: "CN", character: "Lovely MongMong", type: "MG", amount: 1_500_000, month: "2026-11" });
+entry("license", { country: "CN", character: "ふにゅ", type: "ロイヤリティ", amount: 320_000, month: "2026-12" });
+entry("license", { country: "JP", character: "スタジオハヌル", type: "ロイヤリティ", amount: 480_000, month: "2026-11" });
+entry("license", { country: "JP", character: "スタジオハヌル", type: "MG", amount: 1_000_000, month: "2027-01" });
+entry("offline", { country: "JP", character: "ふにゅ", type: "POP UP", venue: "渋谷PARCO", amount: 850_000, month: "2026-11" });
+entry("offline", { country: "CN", character: "Lovely MongMong", type: "委託販売", venue: "上海 サンプル書店", amount: 210_000, month: "2026-12" });
+entry("other", { country: "JP", content: "イラスト制作費", amount: 150_000, month: "2026-11" });
+
+const target = (lineId, month, amount) => batch.set(db.doc(`targets/${lineId}_${month}`), { lineId, month, amount });
+for (const m of ["2026-11", "2026-12", "2027-01", "2027-02", "2027-03"]) {
+  target("CN_LICENSE", m, 1_000_000);
+  target("CN_ONLINE", m, 600_000);
+  target("CN_OFFLINE", m, 200_000);
+  target("JP_LICENSE", m, 800_000);
+  target("JP_OFFLINE", m, 500_000);
+  target("JP_OTHER", m, 100_000);
 }
+
+const weeks = ["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30", "2026-12-07"];
+weeks.forEach((w, i) =>
+  batch.set(db.doc(`onlineWeekly/${w}`), { weekStart: w, currency: "JPY", xiaohongshu: 80_000 + i * 10_000, taobao: 60_000 + (i % 3) * 15_000 }),
+);
+await batch.commit();
 
 console.log("サンプルデータを投入しました。ログイン: demo@example.com / password123");

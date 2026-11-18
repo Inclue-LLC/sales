@@ -1,175 +1,114 @@
-// 集計ロジック（唯一の計算箇所）。
-// 月次PL・週次・CSV はすべてここの結果を使うので、画面ごとに数字が食い違わない。
-
-import { sortCategories } from "./categories";
+// 集計（唯一の計算箇所）。1ページ目・週次・CSV はすべてここの結果を使う。
 import { listMonths, listWeeks } from "./period";
 import {
+  CHANNELS,
   COUNTRIES,
   COUNTRY_LABELS,
-  type Category,
-  type MonthlyPl,
-  type PlRow,
+  LINES,
+  type Channel,
+  type Entry,
+  type OnlineMonth,
+  type OnlineView,
   type Settings,
-  type Triple,
-  type WeeklyMonthGroup,
-  type WeeklyRow,
-  type WeeklyView,
+  type Summary,
+  type SummaryRow,
 } from "./types";
 
-export const zero = (): Triple => ({ target: 0, plan: 0, paid: 0 });
-
-export function add(a: Triple, b: Triple): Triple {
-  return { target: a.target + b.target, plan: a.plan + b.plan, paid: a.paid + b.paid };
-}
-
-/** 生データ（Firestore から読んだもの） */
 export interface RawData {
   settings: Settings;
-  categories: Category[];
-  /** key: `${categoryId}|${month}` */
-  monthly: Map<string, Triple>;
-  /** key: `${weekStart}|${categoryId}` */
-  weekly: Map<string, Triple>;
-  /** weekStart → 上書き計上月 */
+  entries: Entry[];
+  /** `${lineId}|${month}` → 目標 */
+  targets: Map<string, number>;
+  /** weekStart → チャネル別金額 */
+  online: Map<string, Partial<Record<Channel, number>>>;
+  /** weekStart → 手動の計上月 */
   weekOverrides: Record<string, string | null>;
 }
 
-export const monthlyKey = (categoryId: string, month: string) => `${categoryId}|${month}`;
-export const weeklyKey = (weekStart: string, categoryId: string) => `${weekStart}|${categoryId}`;
+export const targetKey = (lineId: string, month: string) => `${lineId}|${month}`;
 
-function sumRows(rows: PlRow[], months: string[]): Record<string, Triple> {
-  const out: Record<string, Triple> = {};
-  for (const m of months) {
-    out[m] = rows.reduce((acc, r) => add(acc, r.values[m] ?? zero()), zero());
-  }
+const emptyMonths = (months: string[]) => Object.fromEntries(months.map((m) => [m, 0])) as Record<string, number>;
+
+function sum(rows: Record<string, number>[], months: string[]): Record<string, number> {
+  const out = emptyMonths(months);
+  for (const r of rows) for (const m of months) out[m] += r[m] ?? 0;
   return out;
 }
 
-/** 週次ビュー：週ごとの値と、計上月ごとの小計 */
-export function buildWeekly(raw: RawData): WeeklyView {
+export function buildOnline(raw: RawData): OnlineView {
   const { settings } = raw;
   const months = listMonths(settings.startMonth, settings.endMonth);
-  const categories = sortCategories(raw.categories.filter((c) => c.granularity === "weekly"));
-  const weeks = listWeeks(settings.startMonth, settings.endMonth, raw.weekOverrides);
-
-  const groups = new Map<string, WeeklyMonthGroup>();
-  for (const m of months) {
-    const values: Record<string, Triple> = {};
-    for (const c of categories) values[c.id] = zero();
-    groups.set(m, { month: m, weeks: [], subtotal: { values, total: zero() } });
-  }
-
-  for (const w of weeks) {
-    const values: Record<string, Triple> = {};
-    let total = zero();
-    for (const c of categories) {
-      const v = raw.weekly.get(weeklyKey(w.weekStart, c.id)) ?? zero();
-      values[c.id] = v;
-      total = add(total, v);
-    }
-    const row: WeeklyRow = { ...w, values, total };
+  const zero = () => Object.fromEntries(CHANNELS.map((c) => [c.key, 0])) as Record<Channel, number>;
+  const groups = new Map<string, OnlineMonth>(months.map((m) => [m, { month: m, weeks: [], subtotal: zero(), total: 0 }]));
+  for (const w of listWeeks(settings.startMonth, settings.endMonth, raw.weekOverrides)) {
+    const src = raw.online.get(w.weekStart) ?? {};
+    const values = zero();
+    for (const c of CHANNELS) values[c.key] = src[c.key] ?? 0;
+    const total = CHANNELS.reduce((a, c) => a + values[c.key], 0);
     const g = groups.get(w.bookingMonth);
-    if (!g) continue; // listWeeks が期間内の月しか返さないので通常起きない
-    g.weeks.push(row);
-    for (const c of categories) g.subtotal.values[c.id] = add(g.subtotal.values[c.id], values[c.id]);
-    g.subtotal.total = add(g.subtotal.total, total);
+    if (!g) continue;
+    g.weeks.push({ ...w, values, total });
+    for (const c of CHANNELS) g.subtotal[c.key] += values[c.key];
+    g.total += total;
   }
-
-  return { settings, months, categories, groups: [...groups.values()] };
+  return { settings, months, groups: [...groups.values()] };
 }
 
-/** 月次PL */
-export function buildMonthlyPl(raw: RawData): MonthlyPl {
+export function buildSummary(raw: RawData): Summary {
   const { settings } = raw;
   const months = listMonths(settings.startMonth, settings.endMonth);
-  const cats = sortCategories(raw.categories);
+  const online = buildOnline(raw);
 
-  // 週次カテゴリの月別集計（計上月ベース）
-  const weekly = buildWeekly(raw);
-  const weeklyByCatMonth = new Map<string, Triple>();
-  for (const g of weekly.groups) {
-    for (const c of weekly.categories) {
-      weeklyByCatMonth.set(monthlyKey(c.id, g.month), g.subtotal.values[c.id]);
-    }
+  // 案件の売上を 区分×国×月 で合計
+  const entrySales = new Map<string, number>();
+  for (const e of raw.entries) {
+    const k = `${e.kind}|${e.country}|${e.month}`;
+    entrySales.set(k, (entrySales.get(k) ?? 0) + e.amount);
   }
 
-  const categoryValues = (c: Category): Record<string, Triple> => {
-    const values: Record<string, Triple> = {};
-    for (const m of months) {
-      const src = c.granularity === "weekly" ? weeklyByCatMonth : raw.monthly;
-      values[m] = { ...(src.get(monthlyKey(c.id, m)) ?? zero()) };
-    }
-    return values;
-  };
-
-  const rows: PlRow[] = [];
-  const countryTotals: PlRow[] = [];
-
+  const rows: SummaryRow[] = [];
+  const countryTotals: SummaryRow[] = [];
   for (const country of COUNTRIES) {
-    const cc = cats.filter((c) => c.country === country);
-    if (cc.length === 0) continue;
-    rows.push({ key: `${country}`, label: COUNTRY_LABELS[country], level: 0, kind: "header", values: {} });
-
-    const groupTotals: PlRow[] = [];
-    const groupKeys = [...new Set(cc.map((c) => c.groupKey))];
-    for (const gk of groupKeys) {
-      const gc = cc.filter((c) => c.groupKey === gk);
-      const isSingle = gc.length === 1 && gc[0].subKey === null;
-      if (isSingle) {
-        const c = gc[0];
-        const row: PlRow = {
-          key: c.id,
-          label: c.groupLabel,
-          level: 1,
-          kind: c.granularity === "weekly" ? "auto" : "input",
-          categoryId: c.id,
-          values: categoryValues(c),
-        };
-        rows.push(row);
-        groupTotals.push(row);
-        continue;
+    const lines = LINES.filter((l) => l.country === country);
+    if (lines.length === 0) continue;
+    rows.push({ key: country, label: COUNTRY_LABELS[country], kind: "country", target: null, sales: {} });
+    const lineRows: SummaryRow[] = [];
+    for (const l of lines) {
+      const target = emptyMonths(months);
+      for (const m of months) target[m] = raw.targets.get(targetKey(l.id, m)) ?? 0;
+      const sales = emptyMonths(months);
+      if (l.source === "online") {
+        for (const g of online.groups) sales[g.month] = g.total;
+      } else {
+        for (const m of months) sales[m] = entrySales.get(`${l.source}|${country}|${m}`) ?? 0;
       }
-      const subRows: PlRow[] = gc.map((c) => ({
-        key: c.id,
-        label: `${c.groupLabel} ${c.subLabel ?? ""}`.trim(),
-        level: 2,
-        kind: c.granularity === "weekly" ? "auto" : "input",
-        categoryId: c.id,
-        values: categoryValues(c),
-      }));
-      rows.push(...subRows);
-      const sub: PlRow = {
-        key: `${country}_${gk}_TOTAL`,
-        label: `${gc[0].groupLabel} 計`,
-        level: 1,
-        kind: "auto",
-        emphasis: "subtotal",
-        values: sumRows(subRows, months),
-      };
-      rows.push(sub);
-      groupTotals.push(sub);
+      const row: SummaryRow = { key: l.id, label: l.label, kind: "line", lineId: l.id, target, sales };
+      rows.push(row);
+      lineRows.push(row);
+      if (l.source === "online") {
+        for (const c of CHANNELS) {
+          const cs = emptyMonths(months);
+          for (const g of online.groups) cs[g.month] = g.subtotal[c.key];
+          rows.push({ key: `${l.id}_${c.key}`, label: c.label, kind: "channel", target: null, sales: cs });
+        }
+      }
     }
-
-    const total: PlRow = {
+    const total: SummaryRow = {
       key: `${country}_TOTAL`,
       label: `${COUNTRY_LABELS[country]} 計`,
-      level: 0,
-      kind: "auto",
-      emphasis: "total",
-      values: sumRows(groupTotals, months),
+      kind: "total",
+      target: sum(lineRows.map((r) => r.target!), months),
+      sales: sum(lineRows.map((r) => r.sales), months),
     };
     rows.push(total);
     countryTotals.push(total);
   }
-
   rows.push({
     key: "GRAND_TOTAL",
     label: "合計",
-    level: 0,
-    kind: "auto",
-    emphasis: "grand",
-    values: sumRows(countryTotals, months),
+    kind: "grand",
+    target: sum(countryTotals.map((r) => r.target!), months),
+    sales: sum(countryTotals.map((r) => r.sales), months),
   });
-
   return { settings, months, rows };
 }

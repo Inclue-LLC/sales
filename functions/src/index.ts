@@ -1,5 +1,4 @@
-// API エントリポイント。
-// コールドスタートとデプロイ単位を減らすため、1 つの callable 関数 `api` に action を渡して振り分ける。
+// API エントリポイント。1 つの callable 関数 `api` に action を渡して振り分ける。
 // クライアントは Firestore に直接アクセスせず（firestore.rules で全拒否）、必ずここを通る。
 
 import { initializeApp } from "firebase-admin/app";
@@ -7,10 +6,10 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
-import { buildMonthlyPl, buildWeekly } from "./domain/aggregate";
-import { dealsCsv, monthlyPlCsv, weeklyCsv } from "./domain/csv";
+import { buildOnline, buildSummary } from "./domain/aggregate";
+import { entriesCsv, onlineCsv, summaryCsv } from "./domain/csv";
 import { listMonths, listWeeks } from "./domain/period";
-import type { Member } from "./domain/types";
+import { CHANNELS, LINES, type Channel, type Member } from "./domain/types";
 import * as V from "./domain/validate";
 import * as repo from "./repo";
 
@@ -18,102 +17,99 @@ initializeApp();
 setGlobalOptions({ region: "asia-northeast1", maxInstances: 5 });
 
 type Ctx = { uid: string; email?: string };
-type Handler = (payload: Record<string, unknown>, ctx: Ctx) => Promise<unknown>;
+type Handler = (p: Record<string, unknown>, ctx: Ctx) => Promise<unknown>;
 
-const monthlyPl = async () => buildMonthlyPl(await repo.loadRaw());
-const weeklyView = async () => buildWeekly(await repo.loadRaw());
+const summary = async () => buildSummary(await repo.loadRaw());
+const online = async () => buildOnline(await repo.loadRaw());
+
+function asArray(v: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(v) || v.length === 0 || v.length > 1000) throw new V.ValidationError("変更内容が不正です");
+  return v as Record<string, unknown>[];
+}
 
 const handlers: Record<string, Handler> = {
-  // ---- 月次PL ----
-  getMonthlyPl: () => monthlyPl(),
+  // ---- 1ページ目 ----
+  getSummary: () => summary(),
 
-  /** changes: [{categoryId, month, field, value}] → 再計算後の PL を返す */
-  saveMonthlyCells: async (p, ctx) => {
-    const settings = await repo.getSettings();
-    const months = listMonths(settings.startMonth, settings.endMonth);
-    const cats = await repo.getCategories();
+  /** changes: [{lineId, month, value}] → 再計算後の一覧を返す */
+  saveTargets: async (p, ctx) => {
+    const s = await repo.getSettings();
+    const months = listMonths(s.startMonth, s.endMonth);
     const changes = asArray(p.changes).map((c) => {
-      const cat = cats.find((x) => x.id === c.categoryId);
-      if (!cat) throw new V.ValidationError("カテゴリが不正です");
-      if (cat.granularity !== "monthly") throw new V.ValidationError("この行は週次から自動集計されます");
-      return { categoryId: cat.id, month: V.month(c.month, months), field: V.field(c.field), value: V.amount(c.value) };
+      if (!LINES.some((l) => l.id === c.lineId)) throw new V.ValidationError("区分が不正です");
+      return { lineId: c.lineId as string, month: V.month(c.month, months), value: V.amount(c.value, "目標") };
     });
-    await repo.saveMonthlyCells(changes, ctx.uid);
-    await repo.audit(ctx.uid, ctx.email, "saveMonthlyCells", { changes });
-    return monthlyPl();
+    await repo.saveTargets(changes, ctx.uid);
+    await repo.audit(ctx.uid, ctx.email, "saveTargets", { changes });
+    return summary();
   },
 
-  // ---- 週次 ----
-  getWeekly: () => weeklyView(),
-
-  /** changes: [{weekStart, categoryId, field, value}] → 再計算後の週次ビューを返す */
-  saveWeeklyCells: async (p, ctx) => {
-    const settings = await repo.getSettings();
-    const weekStarts = new Set(listWeeks(settings.startMonth, settings.endMonth).map((w) => w.weekStart));
-    const cats = await repo.getCategories();
-    const changes = asArray(p.changes).map((c) => {
-      const cat = cats.find((x) => x.id === c.categoryId);
-      if (!cat || cat.granularity !== "weekly") throw new V.ValidationError("カテゴリが不正です");
-      if (!weekStarts.has(c.weekStart as string)) throw new V.ValidationError("期間外の週です");
-      return {
-        categoryId: cat.id,
-        weekStart: c.weekStart as string,
-        field: V.field(c.field),
-        value: V.amount(c.value),
-      };
-    });
-    await repo.saveWeeklyCells(changes, ctx.uid);
-    await repo.audit(ctx.uid, ctx.email, "saveWeeklyCells", { changes });
-    return weeklyView();
+  // ---- ライセンス／オフライン／その他 ----
+  listEntries: async (p) => {
+    const list = await repo.listEntries(V.kind(p.kind));
+    return list.sort((a, b) => b.month.localeCompare(a.month) || b.createdAt.localeCompare(a.createdAt));
   },
 
-  /** 計上月の上書き。month=null で自動判定に戻す */
-  setWeekBookingMonth: async (p, ctx) => {
-    const settings = await repo.getSettings();
-    const months = listMonths(settings.startMonth, settings.endMonth);
-    const weekStart = String(p.weekStart);
-    const week = listWeeks(settings.startMonth, settings.endMonth).find((w) => w.weekStart === weekStart);
-    if (!week) throw new V.ValidationError("期間外の週です");
-    const m = p.month === null || p.month === "" ? null : V.month(p.month, months);
-    await repo.setWeekOverride(weekStart, m === week.autoMonth ? null : m, ctx.uid);
-    await repo.audit(ctx.uid, ctx.email, "setWeekBookingMonth", { weekStart, month: m });
-    return weeklyView();
-  },
-
-  // ---- 案件 ----
-  listDeals: () => repo.listDeals(),
-
-  saveDeal: async (p, ctx) => {
-    const input = V.deal(p.deal);
+  saveEntry: async (p, ctx) => {
+    const kind = V.kind(p.kind);
+    const input = V.entry(kind, p.entry);
     if (p.id) {
-      const before = await repo.getDeal(String(p.id));
-      if (!before) throw new HttpsError("not-found", "案件が見つかりません");
-      const after = await repo.updateDeal(before.id, input, ctx.uid);
-      await repo.audit(ctx.uid, ctx.email, "updateDeal", { id: before.id, before, after: input });
+      const before = await repo.getEntry(String(p.id));
+      if (!before || before.kind !== kind) throw new HttpsError("not-found", "データが見つかりません");
+      const after = await repo.updateEntry(before.id, input, ctx.uid);
+      await repo.audit(ctx.uid, ctx.email, "updateEntry", { id: before.id, before, after: input });
       return after;
     }
-    const created = await repo.createDeal(input, ctx.uid);
-    await repo.audit(ctx.uid, ctx.email, "createDeal", { id: created.id, after: input });
+    const created = await repo.createEntry(kind, input, ctx.uid);
+    await repo.audit(ctx.uid, ctx.email, "createEntry", { id: created.id, kind, after: input });
     return created;
   },
 
-  deleteDeal: async (p, ctx) => {
-    const before = await repo.getDeal(String(p.id));
-    if (!before) throw new HttpsError("not-found", "案件が見つかりません");
-    await repo.deleteDeal(before.id);
-    await repo.audit(ctx.uid, ctx.email, "deleteDeal", { id: before.id, before });
+  deleteEntry: async (p, ctx) => {
+    const before = await repo.getEntry(String(p.id));
+    if (!before) throw new HttpsError("not-found", "データが見つかりません");
+    await repo.deleteEntry(before.id);
+    await repo.audit(ctx.uid, ctx.email, "deleteEntry", { id: before.id, before });
     return { ok: true };
   },
 
+  // ---- 中国オンライン（週次） ----
+  getOnline: () => online(),
+
+  /** changes: [{weekStart, channel, value}] */
+  saveOnline: async (p, ctx) => {
+    const s = await repo.getSettings();
+    const weeks = new Set(listWeeks(s.startMonth, s.endMonth).map((w) => w.weekStart));
+    const changes = asArray(p.changes).map((c) => {
+      if (!weeks.has(c.weekStart as string)) throw new V.ValidationError("期間外の週です");
+      if (!CHANNELS.some((ch) => ch.key === c.channel)) throw new V.ValidationError("販売先が不正です");
+      return { weekStart: c.weekStart as string, channel: c.channel as Channel, value: V.amount(c.value) };
+    });
+    await repo.saveOnline(changes, ctx.uid);
+    await repo.audit(ctx.uid, ctx.email, "saveOnline", { changes });
+    return online();
+  },
+
+  /** 計上月の変更。month=null で自動に戻す */
+  setWeekBookingMonth: async (p, ctx) => {
+    const s = await repo.getSettings();
+    const months = listMonths(s.startMonth, s.endMonth);
+    const week = listWeeks(s.startMonth, s.endMonth).find((w) => w.weekStart === p.weekStart);
+    if (!week) throw new V.ValidationError("期間外の週です");
+    const m = p.month ? V.month(p.month, months) : null;
+    await repo.setWeekOverride(week.weekStart, m === week.autoMonth ? null : m, ctx.uid);
+    await repo.audit(ctx.uid, ctx.email, "setWeekBookingMonth", { weekStart: week.weekStart, month: m });
+    return online();
+  },
+
   // ---- 設定 ----
-  getSettings: async () => ({ settings: await repo.getSettings(), masters: await repo.getMasters() }),
+  getSettings: () => repo.getSettings(),
 
   saveSettings: async (p, ctx) => {
-    const settings = V.settings(p.settings);
-    const masters = V.masters(p.masters);
-    await Promise.all([repo.saveSettings(settings), repo.saveMasters(masters)]);
-    await repo.audit(ctx.uid, ctx.email, "saveSettings", { settings, masters });
-    return { settings, masters };
+    const s = V.settings(p.settings);
+    await repo.saveSettings(s);
+    await repo.audit(ctx.uid, ctx.email, "saveSettings", { settings: s });
+    return s;
   },
 
   // ---- メンバー ----
@@ -159,38 +155,32 @@ const handlers: Record<string, Handler> = {
   exportCsv: async (p) => {
     const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     switch (p.kind) {
-      case "monthly":
-        return { filename: `monthly_pl_${stamp}.csv`, content: monthlyPlCsv(await monthlyPl()) };
-      case "weekly":
-        return { filename: `weekly_online_${stamp}.csv`, content: weeklyCsv(await weeklyView()) };
-      case "deals":
-        return { filename: `license_deals_${stamp}.csv`, content: dealsCsv(await repo.listDeals()) };
+      case "summary":
+        return { filename: `sales_summary_${stamp}.csv`, content: summaryCsv(await summary()) };
+      case "online":
+        return { filename: `cn_online_weekly_${stamp}.csv`, content: onlineCsv(await online()) };
+      case "license":
+      case "offline":
+      case "other":
+        return { filename: `${p.kind}_${stamp}.csv`, content: entriesCsv(p.kind, await repo.listEntries(p.kind)) };
       default:
         throw new V.ValidationError("出力の種類が不正です");
     }
   },
 };
 
-function asArray(v: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(v) || v.length === 0 || v.length > 1000) throw new V.ValidationError("変更内容が不正です");
-  return v as Record<string, unknown>[];
-}
-
 export const api = onCall(async (req: CallableRequest<{ action?: string; payload?: Record<string, unknown> }>) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "ログインしてください");
-  if (!(await repo.isMember(req.auth.uid))) {
-    throw new HttpsError("permission-denied", "このアカウントには利用権限がありません");
-  }
-  const action = req.data?.action ?? "";
-  const handler = handlers[action];
-  if (!handler) throw new HttpsError("invalid-argument", `不明な操作です: ${action}`);
+  if (!(await repo.isMember(req.auth.uid))) throw new HttpsError("permission-denied", "このアカウントには利用権限がありません");
+  const handler = handlers[req.data?.action ?? ""];
+  if (!handler) throw new HttpsError("invalid-argument", `不明な操作です: ${req.data?.action}`);
   try {
     return await handler(req.data.payload ?? {}, { uid: req.auth.uid, email: req.auth.token.email });
   } catch (e) {
     if (e instanceof V.ValidationError) throw new HttpsError("invalid-argument", e.message);
     if (e instanceof HttpsError) throw e;
-    const code = (e as { code?: string }).code;
-    if (code === "auth/email-already-exists") throw new HttpsError("already-exists", "このメールアドレスは登録済みです");
+    if ((e as { code?: string }).code === "auth/email-already-exists")
+      throw new HttpsError("already-exists", "このメールアドレスは登録済みです");
     console.error(e);
     throw new HttpsError("internal", "サーバーでエラーが発生しました");
   }

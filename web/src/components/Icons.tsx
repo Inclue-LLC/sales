@@ -75,3 +75,26 @@ export const IconArrowRight = ({ size }: P) => (
     <path d="M5 12h14M13 6l6 6-6 6" />
   </svg>
 );
+export const IconTable = ({ size }: P) => (
+  <svg {...base(size)}>
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="M3 10h18M9 10v10" />
+  </svg>
+);
+export const IconBag = ({ size }: P) => (
+  <svg {...base(size)}>
+    <path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2" />
+  </svg>
+);
+export const IconStore = ({ size }: P) => (
+  <svg {...base(size)}>
+    <path d="M4 10v10h16V10M3 4h18l-1 6H4zM10 20v-5h4v5" />
+  </svg>
+);
+export const IconDots = ({ size }: P) => (
+  <svg {...base(size)}>
+    <circle cx="5" cy="12" r="1.2" />
+    <circle cx="12" cy="12" r="1.2" />
+    <circle cx="19" cy="12" r="1.2" />
+  </svg>
+);

@@ -1,38 +1,19 @@
-// Firestore の読み書き。コレクション構成はここに集約する。
+// Firestore の読み書き。
 //
-// settings/app                     … 期間・通貨ラベル
-// settings/masters                 … キャラクター・契約形態の候補
-// categories/{categoryId}          … 入力カテゴリ
-// monthlyEntries/{catId}_{YYYY-MM} … 月別入力（目標/予定/入金済み）
-// weeklyEntries/{weekStart}_{catId}… 週別入力
-// weeks/{weekStart}                … 計上月の手動上書き
-// deals/{autoId}                   … ライセンス案件
-// counters/deals                   … 案件 No の採番
-// members/{uid}                    … 利用を許可したメンバー
-// auditLogs/{autoId}               … 変更履歴
+// settings/app                    … 期間・通貨ラベル・キャラクター候補
+// targets/{lineId}_{YYYY-MM}      … 1ページ目の目標
+// entries/{autoId}                … ライセンス／オフライン／その他の案件（kind で区別）
+// onlineWeekly/{weekStart}        … 中国オンラインの週次（チャネル別）
+// weeks/{weekStart}               … 計上月の手動変更
+// members/{uid}                   … 利用を許可したメンバー
+// auditLogs/{autoId}              … 変更履歴
 
-import { getFirestore, FieldValue, type Firestore } from "firebase-admin/firestore";
-import { monthlyKey, weeklyKey, type RawData } from "./domain/aggregate";
-import { defaultCategories } from "./domain/categories";
-import {
-  DEFAULT_MASTERS,
-  DEFAULT_SETTINGS,
-  type Category,
-  type Deal,
-  type DealInput,
-  type Masters,
-  type Settings,
-  type Triple,
-  type ValueField,
-} from "./domain/types";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { targetKey, type RawData } from "./domain/aggregate";
+import { DEFAULT_SETTINGS, type Channel, type Entry, type EntryInput, type EntryKind, type Settings } from "./domain/types";
 
-const db = (): Firestore => getFirestore();
-
-const toTriple = (d: FirebaseFirestore.DocumentData): Triple => ({
-  target: Number(d.target ?? 0),
-  plan: Number(d.plan ?? 0),
-  paid: Number(d.paid ?? 0),
-});
+const db = () => getFirestore();
+const iso = (v: unknown) => (v as { toDate?: () => Date })?.toDate?.().toISOString() ?? "";
 
 export async function getSettings(): Promise<Settings> {
   const snap = await db().doc("settings/app").get();
@@ -43,182 +24,109 @@ export async function saveSettings(s: Settings): Promise<void> {
   await db().doc("settings/app").set(s);
 }
 
-export async function getMasters(): Promise<Masters> {
-  const snap = await db().doc("settings/masters").get();
-  return { ...DEFAULT_MASTERS, ...(snap.data() as Partial<Masters> | undefined) };
-}
-
-export async function saveMasters(m: Masters): Promise<void> {
-  await db().doc("settings/masters").set(m);
-}
-
-export async function getCategories(): Promise<Category[]> {
-  const snap = await db().collection("categories").get();
-  if (!snap.empty) return snap.docs.map((d) => ({ ...(d.data() as Category), id: d.id }));
-  // 初回: 既定カテゴリを投入
-  const cats = defaultCategories();
-  const batch = db().batch();
-  for (const c of cats) batch.set(db().doc(`categories/${c.id}`), c);
-  await batch.commit();
-  return cats;
-}
-
-export async function loadRaw(): Promise<RawData> {
-  const [settings, categories, monthlySnap, weeklySnap, weeksSnap] = await Promise.all([
-    getSettings(),
-    getCategories(),
-    db().collection("monthlyEntries").get(),
-    db().collection("weeklyEntries").get(),
-    db().collection("weeks").get(),
-  ]);
-  const monthly = new Map<string, Triple>();
-  for (const d of monthlySnap.docs) {
-    const x = d.data();
-    monthly.set(monthlyKey(x.categoryId, x.month), toTriple(x));
-  }
-  const weekly = new Map<string, Triple>();
-  for (const d of weeklySnap.docs) {
-    const x = d.data();
-    weekly.set(weeklyKey(x.weekStart, x.categoryId), toTriple(x));
-  }
-  const weekOverrides: Record<string, string | null> = {};
-  for (const d of weeksSnap.docs) weekOverrides[d.id] = d.data().bookingMonthOverride ?? null;
-  return { settings, categories, monthly, weekly, weekOverrides };
-}
-
-export interface CellChange {
-  field: ValueField;
-  value: number;
-}
-
-export async function saveMonthlyCells(
-  changes: Array<CellChange & { categoryId: string; month: string }>,
-  uid: string,
-): Promise<void> {
-  const batch = db().batch();
-  for (const c of changes) {
-    // フィールド単位で merge するので、別のセルを同時に編集しても上書きし合わない
-    batch.set(
-      db().doc(`monthlyEntries/${c.categoryId}_${c.month}`),
-      {
-        categoryId: c.categoryId,
-        month: c.month,
-        currency: "JPY",
-        [c.field]: c.value,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: uid,
-      },
-      { merge: true },
-    );
-  }
-  await batch.commit();
-}
-
-export async function saveWeeklyCells(
-  changes: Array<CellChange & { categoryId: string; weekStart: string }>,
-  uid: string,
-): Promise<void> {
-  const batch = db().batch();
-  for (const c of changes) {
-    batch.set(
-      db().doc(`weeklyEntries/${c.weekStart}_${c.categoryId}`),
-      {
-        categoryId: c.categoryId,
-        weekStart: c.weekStart,
-        currency: "JPY",
-        [c.field]: c.value,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: uid,
-      },
-      { merge: true },
-    );
-  }
-  await batch.commit();
-}
-
-export async function setWeekOverride(weekStart: string, month: string | null, uid: string): Promise<void> {
-  await db()
-    .doc(`weeks/${weekStart}`)
-    .set({ bookingMonthOverride: month, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
-}
-
-// ---------- 案件 ----------
-
-function toDeal(id: string, x: FirebaseFirestore.DocumentData): Deal {
+function toEntry(id: string, x: FirebaseFirestore.DocumentData): Entry {
   return {
     id,
-    no: x.no,
+    kind: x.kind,
     country: x.country,
-    character: x.character ?? "",
-    licensee: x.licensee ?? "",
-    title: x.title ?? "",
-    productCategory: x.productCategory ?? "",
-    contractType: x.contractType ?? "",
-    status: x.status,
-    startDate: x.startDate ?? null,
-    endDate: x.endDate ?? null,
-    royaltyRate: x.royaltyRate ?? null,
-    amount: x.amount ?? null,
-    owner: x.owner ?? "",
-    note: x.note ?? "",
-    createdAt: x.createdAt?.toDate?.().toISOString() ?? "",
-    updatedAt: x.updatedAt?.toDate?.().toISOString() ?? "",
+    month: x.month,
+    amount: x.amount ?? 0,
+    character: x.character,
+    type: x.type,
+    venue: x.venue,
+    content: x.content,
+    createdAt: iso(x.createdAt),
+    updatedAt: iso(x.updatedAt),
   };
 }
 
-export async function listDeals(): Promise<Deal[]> {
-  const snap = await db().collection("deals").orderBy("no").get();
-  return snap.docs.map((d) => toDeal(d.id, d.data()));
+export async function listEntries(kind?: EntryKind): Promise<Entry[]> {
+  const q = kind ? db().collection("entries").where("kind", "==", kind) : db().collection("entries");
+  const snap = await q.get();
+  return snap.docs.map((d) => toEntry(d.id, d.data()));
 }
 
-export async function getDeal(id: string): Promise<Deal | null> {
-  const snap = await db().doc(`deals/${id}`).get();
-  return snap.exists ? toDeal(snap.id, snap.data()!) : null;
+export async function getEntry(id: string): Promise<Entry | null> {
+  const snap = await db().doc(`entries/${id}`).get();
+  return snap.exists ? toEntry(snap.id, snap.data()!) : null;
 }
 
-/** 新規作成。No は欠番を詰めずに単調増加で採番する。 */
-export async function createDeal(input: DealInput, uid: string): Promise<Deal> {
-  const ref = db().collection("deals").doc();
-  await db().runTransaction(async (tx) => {
-    const counterRef = db().doc("counters/deals");
-    const counter = await tx.get(counterRef);
-    const no = (counter.data()?.last ?? 0) + 1;
-    tx.set(counterRef, { last: no });
-    tx.set(ref, {
-      ...input,
-      no,
-      createdAt: FieldValue.serverTimestamp(),
+export async function createEntry(kind: EntryKind, input: EntryInput, uid: string): Promise<Entry> {
+  const ref = await db()
+    .collection("entries")
+    .add({ ...input, kind, currency: "JPY", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+  return (await getEntry(ref.id))!;
+}
+
+export async function updateEntry(id: string, input: EntryInput, uid: string): Promise<Entry> {
+  await db()
+    .doc(`entries/${id}`)
+    .update({ ...input, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
+  return (await getEntry(id))!;
+}
+
+export async function deleteEntry(id: string): Promise<void> {
+  await db().doc(`entries/${id}`).delete();
+}
+
+export async function saveTargets(changes: { lineId: string; month: string; value: number }[], uid: string) {
+  const batch = db().batch();
+  for (const c of changes) {
+    batch.set(db().doc(`targets/${c.lineId}_${c.month}`), {
+      lineId: c.lineId,
+      month: c.month,
+      amount: c.value,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: uid,
     });
-  });
-  return (await getDeal(ref.id))!;
+  }
+  await batch.commit();
 }
 
-export async function updateDeal(id: string, input: DealInput, uid: string): Promise<Deal> {
-  await db()
-    .doc(`deals/${id}`)
-    .update({ ...input, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
-  return (await getDeal(id))!;
+export async function saveOnline(changes: { weekStart: string; channel: Channel; value: number }[], uid: string) {
+  const batch = db().batch();
+  for (const c of changes) {
+    // チャネル単位で merge するので、別のチャネルを同時に編集しても上書きし合わない
+    batch.set(
+      db().doc(`onlineWeekly/${c.weekStart}`),
+      { weekStart: c.weekStart, [c.channel]: c.value, currency: "JPY", updatedAt: FieldValue.serverTimestamp(), updatedBy: uid },
+      { merge: true },
+    );
+  }
+  await batch.commit();
 }
 
-export async function deleteDeal(id: string): Promise<void> {
-  await db().doc(`deals/${id}`).delete();
+export async function setWeekOverride(weekStart: string, month: string | null, uid: string) {
+  await db().doc(`weeks/${weekStart}`).set({ bookingMonthOverride: month, updatedAt: FieldValue.serverTimestamp(), updatedBy: uid });
 }
 
-// ---------- メンバー・履歴 ----------
+export async function loadRaw(): Promise<RawData> {
+  const [settings, entries, targetsSnap, onlineSnap, weeksSnap] = await Promise.all([
+    getSettings(),
+    listEntries(),
+    db().collection("targets").get(),
+    db().collection("onlineWeekly").get(),
+    db().collection("weeks").get(),
+  ]);
+  const targets = new Map<string, number>();
+  for (const d of targetsSnap.docs) {
+    const x = d.data();
+    targets.set(targetKey(x.lineId, x.month), Number(x.amount ?? 0));
+  }
+  const online = new Map<string, Partial<Record<Channel, number>>>();
+  for (const d of onlineSnap.docs) {
+    const x = d.data();
+    online.set(x.weekStart, { xiaohongshu: Number(x.xiaohongshu ?? 0), taobao: Number(x.taobao ?? 0) });
+  }
+  const weekOverrides: Record<string, string | null> = {};
+  for (const d of weeksSnap.docs) weekOverrides[d.id] = d.data().bookingMonthOverride ?? null;
+  return { settings, entries, targets, online, weekOverrides };
+}
 
 export async function isMember(uid: string): Promise<boolean> {
   return (await db().doc(`members/${uid}`).get()).exists;
 }
 
-export async function audit(
-  uid: string,
-  email: string | undefined,
-  action: string,
-  detail: Record<string, unknown>,
-): Promise<void> {
-  await db()
-    .collection("auditLogs")
-    .add({ at: FieldValue.serverTimestamp(), uid, email: email ?? null, action, detail });
+export async function audit(uid: string, email: string | undefined, action: string, detail: Record<string, unknown>) {
+  await db().collection("auditLogs").add({ at: FieldValue.serverTimestamp(), uid, email: email ?? null, action, detail });
 }
