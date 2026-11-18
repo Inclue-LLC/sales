@@ -1,4 +1,4 @@
-import { httpsCallable } from "firebase/functions";
+import { httpsCallable, httpsCallableFromURL } from "firebase/functions";
 import type {
   Deal,
   DealInput,
@@ -9,13 +9,16 @@ import type {
   ValueField,
   WeeklyView,
 } from "../../functions/src/domain/types";
-import { functions } from "./firebase";
+import { functions, useEmulators } from "./firebase";
 
 export type * from "../../functions/src/domain/types";
 // 定数は functions と共有（types.ts は依存のない純粋なモジュール）
 export { COUNTRY_LABELS, DEAL_STATUSES, DEFAULT_MASTERS } from "../../functions/src/domain/types";
 
-const call = httpsCallable<{ action: string; payload?: unknown }, unknown>(functions, "api");
+type Req = { action: string; payload?: unknown };
+const call = useEmulators
+  ? httpsCallableFromURL<Req, unknown>(functions, `${window.location.origin}/__fn/demo-sales-pl/asia-northeast1/api`)
+  : httpsCallable<Req, unknown>(functions, "api");
 
 async function api<T>(action: string, payload?: unknown): Promise<T> {
   try {
