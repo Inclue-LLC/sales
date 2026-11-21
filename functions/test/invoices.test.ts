@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import { buildSummary } from "../src/domain/aggregate";
+import { DEFAULT_SETTINGS } from "../src/domain/types";
+import { invoiceToEntry } from "../src/invoices";
+
+const inv = (p: Record<string, unknown> = {}) => ({
+  type: "invoice",
+  status: "issued",
+  number: "INV-2026-0001",
+  clientName: "株式会社サンプル",
+  subject: "ライセンス料",
+  issueDate: "2026-11-20",
+  dueDate: "2026-12-31",
+  totals: { total: 210_000 },
+  pl: { country: "JP", kind: "license", character: "ふにゅ", type: "MG", venue: "", content: "" },
+  ...p,
+});
+
+describe("invoiceToEntry", () => {
+  it("maps an issued invoice to a JPY entry in the due-date month", () => {
+    expect(invoiceToEntry("abc", inv())).toMatchObject({
+      id: "inv_abc",
+      source: "invoice",
+      kind: "license",
+      country: "JP",
+      month: "2026-12",
+      amount: 210_000,
+      currency: "JPY",
+      character: "ふにゅ",
+      type: "MG",
+      invoiceNumber: "INV-2026-0001",
+    });
+  });
+
+  it("skips drafts, cancelled invoices, other document types and invoices without a PL link", () => {
+    expect(invoiceToEntry("a", inv({ status: "draft" }))).toBeNull();
+    expect(invoiceToEntry("a", inv({ status: "cancelled" }))).toBeNull();
+    expect(invoiceToEntry("a", inv({ type: "receipt" }))).toBeNull();
+    expect(invoiceToEntry("a", inv({ pl: null }))).toBeNull();
+    expect(invoiceToEntry("a", inv({ status: "paid" }))).not.toBeNull();
+  });
+
+  it("falls back to the issue-date month when there is no due date", () => {
+    expect(invoiceToEntry("a", inv({ dueDate: "" }))!.month).toBe("2026-11");
+  });
+
+  it("always books invoices to Japan, in yuan on the summary", () => {
+    const e = invoiceToEntry("a", inv({ pl: { country: "CN", kind: "other", character: "", type: "", venue: "", content: "監修料" } }))!;
+    expect(e.country).toBe("JP");
+    const s = buildSummary({ settings: DEFAULT_SETTINGS, entries: [e], online: { CN: new Map(), JP: new Map() }, weekOverrides: {} });
+    // 210,000円 ÷ 21 = 10,000元
+    expect(s.rows.find((r) => r.key === "JP_OTHER")!.sales["2026-12"]).toBe(10_000);
+    expect(s.rows.find((r) => r.key === "JP")!.sales["2026-12"]).toBe(10_000);
+    expect(s.rows.find((r) => r.key === "CN")!.sales["2026-12"]).toBe(0);
+  });
+});
+
+describe("invoiceToEntry licensee", () => {
+  it("uses the client name without the company type for licenses", () => {
+    expect(invoiceToEntry("a", inv())?.licensee).toBe("サンプル");
+    expect(invoiceToEntry("a", inv({ clientName: "株式会社サンプル 営業部" }), "株式会社サンプル")?.licensee).toBe("サンプル");
+  });
+  it("sets the company name for 'other' invoices", () => {
+    const x = invoiceToEntry("a", inv({ pl: { kind: "other", content: "制作費" } }));
+    expect(x?.company).toBe("サンプル");
+    expect(x?.licensee).toBeUndefined();
+  });
+  it("does not set a licensee for other kinds", () => {
+    expect(invoiceToEntry("a", inv({ pl: { kind: "offline", character: "ふにゅ", type: "POP UP", venue: "渋谷" } }))?.licensee).toBeUndefined();
+  });
+});

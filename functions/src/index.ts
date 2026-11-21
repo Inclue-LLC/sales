@@ -1,0 +1,134 @@
+// API エントリポイント。1 つの callable 関数 `api` に action を渡して振り分ける。
+// クライアントは Firestore に直接アクセスせず（firestore.rules で全拒否）、必ずここを通る。
+
+import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { buildOnline, buildSummary } from "./domain/aggregate";
+import { listWeeks } from "./domain/period";
+import { COUNTRIES, SHARED_LOGIN_EMAIL, isChannelOf, toCny, type Country, type Entry } from "./domain/types";
+import * as V from "./domain/validate";
+import { listInvoiceEntries } from "./invoices";
+import * as repo from "./repo";
+
+initializeApp();
+// 項目のない値（例：オフラインの「案件内容」）は保存時に無視する。
+// これがないと、編集・削除時の変更履歴の保存でエラーになる。
+getFirestore().settings({ ignoreUndefinedProperties: true });
+setGlobalOptions({ region: "asia-northeast1", maxInstances: 5 });
+
+type Ctx = { uid: string; email?: string };
+type Handler = (p: Record<string, unknown>, ctx: Ctx) => Promise<unknown>;
+
+const summary = async () => buildSummary(await repo.loadRaw());
+const online = async (country: Country) => buildOnline(await repo.loadRaw(), country);
+function country(v: unknown): Country {
+  if (!COUNTRIES.includes(v as Country)) throw new V.ValidationError("国が不正です");
+  return v as Country;
+}
+
+function asArray(v: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(v) || v.length === 0 || v.length > 1000) throw new V.ValidationError("変更内容が不正です");
+  return v as Record<string, unknown>[];
+}
+
+const handlers: Record<string, Handler> = {
+  // ---- 1ページ目 ----
+  getSummary: () => summary(),
+
+
+  // ---- ライセンス／オフライン／その他 ----
+  listEntries: async (p) => {
+    const kind = V.kind(p.kind);
+    const [list, invoices, s] = await Promise.all([repo.listEntries(kind), listInvoiceEntries(), repo.getSettings()]);
+    return [...list, ...invoices.entries.filter((e) => e.kind === kind)]
+      .map((e): Entry => ({ ...e, amountCny: toCny(e.amount, e.currency, s.jpyPerCny) }))
+      .sort((a, b) => b.month.localeCompare(a.month) || b.createdAt.localeCompare(a.createdAt));
+  },
+
+  saveEntry: async (p, ctx) => {
+    if (String(p.id ?? "").startsWith("inv_")) throw new V.ValidationError("請求書から反映された売上は、請求書ツールで編集してください");
+    const kind = V.kind(p.kind);
+    const input = V.entry(kind, p.entry);
+    if (p.id) {
+      const before = await repo.getEntry(String(p.id));
+      if (!before || before.kind !== kind) throw new HttpsError("not-found", "データが見つかりません");
+      const after = await repo.updateEntry(before.id, input, ctx.uid);
+      await repo.audit(ctx.uid, ctx.email, "updateEntry", { id: before.id, before, after: input });
+      return after;
+    }
+    const created = await repo.createEntry(kind, input, ctx.uid);
+    await repo.audit(ctx.uid, ctx.email, "createEntry", { id: created.id, kind, after: input });
+    return created;
+  },
+
+  deleteEntry: async (p, ctx) => {
+    if (String(p.id ?? "").startsWith("inv_")) throw new V.ValidationError("請求書から反映された売上は、請求書ツールで削除・取消してください");
+    const before = await repo.getEntry(String(p.id));
+    if (!before) throw new HttpsError("not-found", "データが見つかりません");
+    await repo.deleteEntry(before.id);
+    await repo.audit(ctx.uid, ctx.email, "deleteEntry", { id: before.id, before });
+    return { ok: true };
+  },
+
+  // ---- オンライン（週次・国ごと） ----
+  getOnline: (p) => online(country(p.country ?? "CN")),
+
+  /** country, changes: [{weekStart, channel, value}] */
+  saveOnline: async (p, ctx) => {
+    const c0 = country(p.country ?? "CN");
+    const s = await repo.getSettings();
+    const weeks = new Set(listWeeks(s.startMonth, s.endMonth).map((w) => w.weekStart));
+    const changes = asArray(p.changes).map((c) => {
+      if (!weeks.has(c.weekStart as string)) throw new V.ValidationError("期間外の週です");
+      if (!isChannelOf(c0, c.channel)) throw new V.ValidationError("内訳が不正です");
+      return { weekStart: c.weekStart as string, channel: c.channel, value: V.amount(c.value) };
+    });
+    await repo.saveOnline(c0, changes, ctx.uid);
+    await repo.audit(ctx.uid, ctx.email, "saveOnline", { country: c0, changes });
+    return online(c0);
+  },
+
+  // ---- 設定 ----
+  getSettings: () => repo.getSettings(),
+
+  saveSettings: async (p, ctx) => {
+    const s = V.settings(p.settings);
+    await repo.saveSettings(s);
+    await repo.audit(ctx.uid, ctx.email, "saveSettings", { settings: s });
+    return s;
+  },
+
+  // ---- 共有パスワード ----
+  changePassword: async (p, ctx) => {
+    const password = String(p.password ?? "");
+    if (password.length < 8) throw new V.ValidationError("パスワードは8文字以上にしてください");
+    await getAuth().updateUser(ctx.uid, { password });
+    await repo.audit(ctx.uid, ctx.email, "changePassword", {});
+    return { ok: true };
+  },
+};
+
+export const api = onCall(async (req: CallableRequest<{ action?: string; payload?: Record<string, unknown> }>) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "ログインしてください");
+  const action = req.data?.action ?? "";
+  try {
+    // 共有アカウント以外は受け付けない（Firebase Auth で勝手に作られたアカウントを弾く）
+    if (req.auth.token.email !== SHARED_LOGIN_EMAIL) throw new HttpsError("permission-denied", "このアカウントには利用権限がありません");
+    const handler = handlers[action];
+    if (!handler) throw new HttpsError("invalid-argument", `不明な操作です: ${action}`);
+    return await handler(req.data.payload ?? {}, { uid: req.auth.uid, email: req.auth.token.email });
+  } catch (e) {
+    if (e instanceof V.ValidationError) throw new HttpsError("invalid-argument", e.message);
+    if (e instanceof HttpsError) throw e;
+    // 権限不足（データベースを作っていない・サービスアカウントにロールが無い など）はログで分かるようにする
+    console.error(`api action=${action} failed`, e);
+    const grpc = (e as { code?: number }).code;
+    if (grpc === 7)
+      throw new HttpsError("internal", "サーバーにデータベースへのアクセス権がありません（サービスアカウントのロールを確認してください）");
+    if (grpc === 5) throw new HttpsError("internal", "データベースが見つかりません（Firestore を作成したか確認してください）");
+    throw new HttpsError("internal", "サーバーでエラーが発生しました");
+  }
+});
