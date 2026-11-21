@@ -32,6 +32,7 @@ function toEntry(id: string, x: FirebaseFirestore.DocumentData): Entry {
     amount: x.amount ?? 0,
     currency: x.currency ?? currencyOf(x.country),
     amountCny: 0, // 呼び出し側でレートを使って計算する
+    licensee: x.licensee,
     character: x.character,
     type: x.type,
     venue: x.venue,

@@ -42,6 +42,7 @@ export interface EntryInput {
   country: Country;
   month: string; // 計上月 YYYY-MM
   amount: number; // 入力した通貨での金額（中国=元、日本=円）・整数
+  licensee?: string; // ライセンス: ライセンシー名（株式会社などは除いて保存）
   character?: string; // ライセンス・オフライン
   type?: string; // ライセンス: MG/ロイヤリティ、オフライン: POP UP/委託販売
   venue?: string; // オフライン: お店の名前 or イベント名

@@ -54,3 +54,13 @@ describe("invoiceToEntry", () => {
     expect(s.rows.find((r) => r.key === "CN")!.sales["2026-12"]).toBe(0);
   });
 });
+
+describe("invoiceToEntry licensee", () => {
+  it("uses the client name without the company type for licenses", () => {
+    expect(invoiceToEntry("a", inv())?.licensee).toBe("サンプル");
+    expect(invoiceToEntry("a", inv({ clientName: "株式会社サンプル 営業部" }), "株式会社サンプル")?.licensee).toBe("サンプル");
+  });
+  it("does not set a licensee for other kinds", () => {
+    expect(invoiceToEntry("a", inv({ pl: { kind: "offline", character: "ふにゅ", type: "POP UP", venue: "渋谷" } }))?.licensee).toBeUndefined();
+  });
+});

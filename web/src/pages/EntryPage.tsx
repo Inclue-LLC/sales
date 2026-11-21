@@ -11,7 +11,7 @@ import { defaultMonth, monthLabel, num } from "../format";
 export type FieldDef =
   | { key: "character"; label: string; kind: "character" }
   | { key: "type"; label: string; kind: "choice"; options: readonly string[] }
-  | { key: "venue" | "content"; label: string; kind: "text"; placeholder?: string; wide?: boolean };
+  | { key: "licensee" | "venue" | "content"; label: string; kind: "text"; placeholder?: string; wide?: boolean };
 
 export interface EntryPageConfig {
   kind: EntryKind;
@@ -20,7 +20,7 @@ export interface EntryPageConfig {
   fields: FieldDef[];
 }
 
-type Draft = { country: Country; month: string; amount: number } & Partial<Record<"character" | "type" | "venue" | "content", string>>;
+type Draft = { country: Country; month: string; amount: number } & Partial<Record<"licensee" | "character" | "type" | "venue" | "content", string>>;
 
 export default function EntryPage({ config }: { config: EntryPageConfig }) {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -238,7 +238,8 @@ export default function EntryPage({ config }: { config: EntryPageConfig }) {
                         {i === 0 && e.source === "invoice" && (
                           <small className="orig">
                             <span className="invoice-badge">請求書</span>
-                            {e.invoiceNumber}・{e.clientName}
+                            {e.invoiceNumber}
+                            {!e.licensee && `・${e.clientName}`}
                           </small>
                         )}
                       </td>

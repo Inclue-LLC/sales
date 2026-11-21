@@ -6,6 +6,7 @@ export const licenseConfig: EntryPageConfig = {
   title: "ライセンス",
   description: "ライセンス案件の売上を入力します（中国は元、日本は円）。計上月ごとに売上一覧の「ライセンス」へ元で反映されます。",
   fields: [
+    { key: "licensee", label: "ライセンシー", kind: "text", placeholder: "例：サンプル（株式会社などは省く）" },
     { key: "character", label: "キャラクター", kind: "character" },
     { key: "type", label: "種別", kind: "choice", options: LICENSE_TYPES },
   ],

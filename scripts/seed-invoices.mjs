@@ -11,7 +11,7 @@ const db = getFirestore(initializeApp({ projectId: "inclue-invoice" }, "invoice"
 
 const base = { type: "invoice", issueDate: "2026-11-10", subject: "", clientName: "", totals: { total: 0 } };
 const docs = {
-  "inv-jp-license": { ...base, number: "INV-2026-0101", status: "issued", clientName: "株式会社サンプル雑貨", dueDate: "2026-11-30", totals: { total: 330_000 },
+  "inv-jp-license": { ...base, number: "INV-2026-0101", status: "issued", clientId: "c-sample", clientName: "株式会社サンプル雑貨 営業部", dueDate: "2026-11-30", totals: { total: 330_000 },
     pl: { country: "JP", kind: "license", character: "スタジオハヌル", type: "ロイヤリティ", venue: "", content: "" } },
   "inv-cn-offline": { ...base, number: "INV-2026-0102", status: "paid", clientName: "上海サンプル文化", dueDate: "2026-12-31", totals: { total: 105_000 },
     pl: { country: "JP", kind: "offline", character: "ふにゅ", type: "委託販売", venue: "上海 POP UP", content: "" } },
@@ -19,5 +19,6 @@ const docs = {
     pl: { country: "JP", kind: "other", character: "", type: "", venue: "", content: "下書き" } },
   "inv-nopl": { ...base, number: "INV-2026-0104", status: "issued", dueDate: "2026-11-30", totals: { total: 888_888 }, pl: null },
 };
+await db.doc("clients/c-sample").set({ name: "株式会社サンプル雑貨", department: "営業部" });
 for (const [id, d] of Object.entries(docs)) await db.doc(`documents/${id}`).set(d);
 console.log("請求書のサンプルを入れました（反映されるのは 2 件）");

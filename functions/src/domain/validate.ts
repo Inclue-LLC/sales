@@ -1,4 +1,5 @@
 // 入力チェック。クライアントから来た値はすべてここを通す。
+import { stripCompanyType } from "./company";
 import { isMonth } from "./period";
 import { COUNTRIES, LICENSE_TYPES, OFFLINE_TYPES, type EntryInput, type EntryKind, type Settings } from "./types";
 
@@ -41,7 +42,12 @@ export function entry(kind: EntryKind, v: unknown): EntryInput {
     amount: amount(o.amount),
   };
   if (kind === "license")
-    return { ...base, character: str(o.character, "キャラクター", 50, true), type: oneOf(o.type, LICENSE_TYPES, "種別") };
+    return {
+      ...base,
+      licensee: stripCompanyType(str(o.licensee, "ライセンシー", 100, true)),
+      character: str(o.character, "キャラクター", 50, true),
+      type: oneOf(o.type, LICENSE_TYPES, "種別"),
+    };
   if (kind === "offline")
     return {
       ...base,

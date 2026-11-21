@@ -91,8 +91,12 @@ describe("summary", () => {
 
 describe("validate", () => {
   it("requires the fields for each kind", () => {
-    expect(entry("license", { country: "JP", month: "2026-11", amount: "1,000", character: "ふにゅ", type: "MG" })).toMatchObject({ amount: 1000 });
-    expect(() => entry("license", { country: "JP", month: "2026-11", amount: 1, character: "ふにゅ", type: "一括" })).toThrow(ValidationError);
+    expect(entry("license", { country: "JP", month: "2026-11", amount: "1,000", licensee: "株式会社サンプル", character: "ふにゅ", type: "MG" })).toMatchObject({
+      amount: 1000,
+      licensee: "サンプル",
+    });
+    expect(() => entry("license", { country: "JP", month: "2026-11", amount: 1, character: "ふにゅ", type: "MG" })).toThrow(/ライセンシー/);
+    expect(() => entry("license", { country: "JP", month: "2026-11", amount: 1, licensee: "x", character: "ふにゅ", type: "一括" })).toThrow(ValidationError);
     expect(() => entry("offline", { country: "CN", month: "2026-11", amount: 1, character: "x", type: "POP UP" })).toThrow(/お店/);
     expect(() => entry("other", { country: "CN", month: "2026-11", amount: 1.5, content: "x" })).toThrow(/整数/);
   });

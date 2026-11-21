@@ -39,10 +39,10 @@ const now = new Date();
 const entry = (kind, e) =>
   batch.set(db.collection("entries").doc(), { kind, currency: e.country === "JP" ? "JPY" : "CNY", createdAt: now, updatedAt: now, ...e });
 
-entry("license", { country: "CN", character: "Lovely MongMong", type: "MG", amount: 60_000, month: "2026-11" });
-entry("license", { country: "CN", character: "ふにゅ", type: "ロイヤリティ", amount: 15_000, month: "2026-12" });
-entry("license", { country: "JP", character: "スタジオハヌル", type: "ロイヤリティ", amount: 480_000, month: "2026-11" });
-entry("license", { country: "JP", character: "スタジオハヌル", type: "MG", amount: 1_000_000, month: "2027-01" });
+entry("license", { country: "CN", licensee: "上海示例文化", character: "Lovely MongMong", type: "MG", amount: 60_000, month: "2026-11" });
+entry("license", { country: "CN", licensee: "北京示例", character: "ふにゅ", type: "ロイヤリティ", amount: 15_000, month: "2026-12" });
+entry("license", { country: "JP", licensee: "サンプル商事", character: "スタジオハヌル", type: "ロイヤリティ", amount: 480_000, month: "2026-11" });
+entry("license", { country: "JP", licensee: "サンプルトイズ", character: "スタジオハヌル", type: "MG", amount: 1_000_000, month: "2027-01" });
 entry("offline", { country: "JP", character: "ふにゅ", type: "POP UP", venue: "渋谷PARCO", amount: 850_000, month: "2026-11" });
 entry("offline", { country: "CN", character: "Lovely MongMong", type: "委託販売", venue: "上海 サンプル書店", amount: 9_000, month: "2026-12" });
 entry("other", { country: "JP", content: "イラスト制作費", amount: 150_000, month: "2026-11" });
