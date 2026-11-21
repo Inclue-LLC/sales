@@ -633,7 +633,7 @@ table {
   color: var(--text-2);
 }
 
-/* ---------- 3ページ目：中国オンライン ---------- */
+/* ---------- 3ページ目：オンライン ---------- */
 .weekly td {
   padding-top: 6px;
   padding-bottom: 6px;
@@ -877,4 +877,8 @@ table {
 }
 a.btn {
   text-decoration: none;
+}
+.country-switch {
+  width: 240px;
+  margin-bottom: 16px;
 }

@@ -1,5 +1,5 @@
 // 1ページ目：売上一覧。月が右に並び、各月に「目標」「売上」（単位：元）。
-// 目標は国ごとの固定値（編集不可）。売上はライセンス／中国オンライン／オフライン／その他から自動で集計される。
+// 目標は国ごとの固定値（編集不可）。売上はライセンス／オンライン／オフライン／その他から自動で集計される。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Api, COUNTRY_TARGETS, type Summary, type SummaryRow } from "../api";
 import { PageHeader } from "../components/PageHeader";

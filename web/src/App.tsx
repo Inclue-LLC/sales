@@ -40,7 +40,7 @@ function Shell() {
   const nav = [
     { to: "/summary", label: "売上一覧", short: "一覧", icon: <IconTable /> },
     { to: "/license", label: "ライセンス", short: "ライセンス", icon: <IconBriefcase /> },
-    { to: "/online", label: "中国オンライン", short: "オンライン", icon: <IconBag /> },
+    { to: "/online", label: "オンライン", short: "オンライン", icon: <IconBag /> },
     { to: "/offline", label: "オフライン", short: "オフライン", icon: <IconStore /> },
     { to: "/other", label: "その他", short: "その他", icon: <IconDots /> },
     { to: "/settings", label: "設定", short: "設定", icon: <IconSettings /> },

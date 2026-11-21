@@ -2,14 +2,15 @@
 //
 // settings/app                    … 期間・通貨ラベル・キャラクター候補
 // entries/{autoId}                … ライセンス／オフライン／その他の案件（kind で区別）
-// onlineWeekly/{weekStart}        … 中国オンラインの週次（チャネル別）
+// onlineWeekly/{weekStart}        … 中国オンラインの週次（販売先別・元）
+// onlineWeeklyJP/{weekStart}      … 日本オンラインの週次（キャラクター別・円）
 // weeks/{weekStart}               … 計上月の手動変更（現在は画面から変更しない）
 // auditLogs/{autoId}              … 変更履歴
 
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import type { RawData } from "./domain/aggregate";
 import { listInvoiceEntries } from "./invoices";
-import { DEFAULT_SETTINGS, currencyOf, type Channel, type Entry, type EntryInput, type EntryKind, type Settings } from "./domain/types";
+import { DEFAULT_SETTINGS, ONLINE_CHANNELS, currencyOf, type Channel, type Country, type Entry, type EntryInput, type EntryKind, type Settings } from "./domain/types";
 
 const db = () => getFirestore();
 const iso = (v: unknown) => (v as { toDate?: () => Date })?.toDate?.().toISOString() ?? "";
@@ -36,6 +37,7 @@ function toEntry(id: string, x: FirebaseFirestore.DocumentData): Entry {
     character: x.character,
     type: x.type,
     venue: x.venue,
+    company: x.company,
     content: x.content,
     createdAt: iso(x.createdAt),
     updatedAt: iso(x.updatedAt),
@@ -71,13 +73,15 @@ export async function deleteEntry(id: string): Promise<void> {
   await db().doc(`entries/${id}`).delete();
 }
 
-export async function saveOnline(changes: { weekStart: string; channel: Channel; value: number }[], uid: string) {
+const ONLINE_COLLECTION: Record<Country, string> = { CN: "onlineWeekly", JP: "onlineWeeklyJP" };
+
+export async function saveOnline(country: Country, changes: { weekStart: string; channel: Channel; value: number }[], uid: string) {
   const batch = db().batch();
   for (const c of changes) {
     // チャネル単位で merge するので、別のチャネルを同時に編集しても上書きし合わない
     batch.set(
-      db().doc(`onlineWeekly/${c.weekStart}`),
-      { weekStart: c.weekStart, [c.channel]: c.value, currency: "CNY", updatedAt: FieldValue.serverTimestamp(), updatedBy: uid },
+      db().doc(`${ONLINE_COLLECTION[country]}/${c.weekStart}`),
+      { weekStart: c.weekStart, [c.channel]: c.value, currency: currencyOf(country), updatedAt: FieldValue.serverTimestamp(), updatedBy: uid },
       { merge: true },
     );
   }
@@ -85,18 +89,23 @@ export async function saveOnline(changes: { weekStart: string; channel: Channel;
 }
 
 export async function loadRaw(): Promise<RawData> {
-  const [settings, entries, invoices, onlineSnap, weeksSnap] = await Promise.all([
+  const [settings, entries, invoices, cnSnap, jpSnap, weeksSnap] = await Promise.all([
     getSettings(),
     listEntries(),
     listInvoiceEntries(),
-    db().collection("onlineWeekly").get(),
+    db().collection(ONLINE_COLLECTION.CN).get(),
+    db().collection(ONLINE_COLLECTION.JP).get(),
     db().collection("weeks").get(),
   ]);
-  const online = new Map<string, Partial<Record<Channel, number>>>();
-  for (const d of onlineSnap.docs) {
-    const x = d.data();
-    online.set(x.weekStart, { xiaohongshu: Number(x.xiaohongshu ?? 0), taobao: Number(x.taobao ?? 0) });
-  }
+  const toMap = (country: Country, snap: FirebaseFirestore.QuerySnapshot) => {
+    const m = new Map<string, Partial<Record<Channel, number>>>();
+    for (const d of snap.docs) {
+      const x = d.data();
+      m.set(x.weekStart, Object.fromEntries(ONLINE_CHANNELS[country].map((c) => [c.key, Number(x[c.key] ?? 0)])));
+    }
+    return m;
+  };
+  const online = { CN: toMap("CN", cnSnap), JP: toMap("JP", jpSnap) };
   const weekOverrides: Record<string, string | null> = {};
   for (const d of weeksSnap.docs) weekOverrides[d.id] = d.data().bookingMonthOverride ?? null;
   return {

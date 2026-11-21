@@ -1,6 +1,7 @@
 import { httpsCallable, httpsCallableFromURL } from "firebase/functions";
 import type {
   Channel,
+  Country,
   Entry,
   EntryInput,
   EntryKind,
@@ -13,7 +14,7 @@ import { functions, useEmulators } from "./firebase";
 export type * from "../../functions/src/domain/types";
 // 定数は functions と共有（types.ts は依存のない純粋なモジュール）
 export {
-  CHANNELS,
+  ONLINE_CHANNELS,
   COUNTRIES,
   COUNTRY_LABELS,
   COUNTRY_TARGETS,
@@ -57,8 +58,9 @@ export const Api = {
   saveEntry: (kind: EntryKind, entry: EntryInput, id?: string) => api<Entry>("saveEntry", { kind, entry, id }),
   deleteEntry: (id: string) => api<{ ok: true }>("deleteEntry", { id }),
 
-  getOnline: () => api<OnlineView>("getOnline"),
-  saveOnline: (changes: { weekStart: string; channel: Channel; value: number }[]) => api<OnlineView>("saveOnline", { changes }),
+  getOnline: (country: Country) => api<OnlineView>("getOnline", { country }),
+  saveOnline: (country: Country, changes: { weekStart: string; channel: Channel; value: number }[]) =>
+    api<OnlineView>("saveOnline", { country, changes }),
 
   getSettings: () => api<Settings>("getSettings"),
   saveSettings: (settings: Settings) => api<Settings>("saveSettings", { settings }),

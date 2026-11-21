@@ -46,6 +46,7 @@ export interface EntryInput {
   character?: string; // ライセンス・オフライン
   type?: string; // ライセンス: MG/ロイヤリティ、オフライン: POP UP/委託販売
   venue?: string; // オフライン: お店の名前 or イベント名
+  company?: string; // その他: 会社名（株式会社などは除いて保存）
   content?: string; // その他: 案件内容
 }
 
@@ -63,13 +64,23 @@ export interface Entry extends EntryInput {
   updatedAt: string;
 }
 
-// ---------- 中国オンライン（週次） ----------
+// ---------- オンライン（週次） ----------
 
-export const CHANNELS = [
-  { key: "xiaohongshu", label: "小红书" },
-  { key: "taobao", label: "淘宝" },
-] as const;
-export type Channel = (typeof CHANNELS)[number]["key"];
+/** 国ごとのオンラインの内訳（中国は販売先、日本はキャラクター） */
+export const ONLINE_CHANNELS = {
+  CN: [
+    { key: "xiaohongshu", label: "小红书" },
+    { key: "taobao", label: "淘宝" },
+  ],
+  JP: [
+    { key: "hanul", label: "スタジオハヌル" },
+    { key: "mongmong", label: "Lovely MongMong" },
+    { key: "funyu", label: "ふにゅ" },
+  ],
+} as const satisfies Record<Country, readonly { key: string; label: string }[]>;
+export type Channel = (typeof ONLINE_CHANNELS)[Country][number]["key"];
+export const isChannelOf = (country: Country, key: unknown): key is Channel =>
+  ONLINE_CHANNELS[country].some((c) => c.key === key);
 
 export interface Week {
   no: number;
@@ -80,19 +91,26 @@ export interface Week {
   bookingMonth: string; // 実際の計上月
 }
 
+/** 金額は入力した通貨（中国=元、日本=円）。totalCny だけ元に換算した値 */
 export interface OnlineWeek extends Week {
-  values: Record<Channel, number>;
+  values: Partial<Record<Channel, number>>;
   total: number;
+  totalCny: number;
 }
 
 export interface OnlineMonth {
   month: string;
   weeks: OnlineWeek[];
-  subtotal: Record<Channel, number>;
+  subtotal: Partial<Record<Channel, number>>;
+  /** 内訳ごとの月合計（元に換算） */
+  subtotalCny: Partial<Record<Channel, number>>;
   total: number;
+  totalCny: number;
 }
 
 export interface OnlineView {
+  country: Country;
+  currency: Currency;
   settings: Settings;
   months: string[];
   groups: OnlineMonth[];
@@ -120,6 +138,7 @@ export const LINES: Line[] = [
   { id: "CN_OFFLINE", country: "CN", label: "オフライン", source: "offline" },
   { id: "CN_OTHER", country: "CN", label: "その他", source: "other" },
   { id: "JP_LICENSE", country: "JP", label: "ライセンス", source: "license" },
+  { id: "JP_ONLINE", country: "JP", label: "オンライン", source: "online" },
   { id: "JP_OFFLINE", country: "JP", label: "オフライン", source: "offline" },
   { id: "JP_OTHER", country: "JP", label: "その他", source: "other" },
 ];

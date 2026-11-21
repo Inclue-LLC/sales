@@ -20,7 +20,7 @@ const e = (p: Partial<Entry>): Entry => ({
 const raw = (): RawData => ({
   settings: DEFAULT_SETTINGS,
   entries: [],
-  online: new Map(),
+  online: { CN: new Map(), JP: new Map() },
   weekOverrides: {},
 });
 
@@ -47,8 +47,8 @@ describe("summary", () => {
       e({ kind: "offline", country: "JP", amount: 6300 }), // 6300円 ÷ 21 = 300元
       e({ kind: "other", country: "JP", amount: 420, month: "2026-12" }), // 20元
     ];
-    r.online.set("2026-11-02", { xiaohongshu: 100, taobao: 50 });
-    r.online.set("2026-11-30", { xiaohongshu: 7 }); // → 12月
+    r.online.CN.set("2026-11-02", { xiaohongshu: 100, taobao: 50 });
+    r.online.CN.set("2026-11-30", { xiaohongshu: 7 }); // → 12月
 
     const s = buildSummary(r);
     const row = (k: string) => s.rows.find((x) => x.key === k)!;
@@ -74,18 +74,36 @@ describe("summary", () => {
   it("orders rows China first, then Japan", () => {
     expect(buildSummary(raw()).rows.map((r) => r.label)).toEqual([
       "中国", "ライセンス", "オンライン", "小红书", "淘宝", "オフライン", "その他",
-      "日本", "ライセンス", "オフライン", "その他",
+      "日本", "ライセンス", "オンライン", "スタジオハヌル", "Lovely MongMong", "ふにゅ", "オフライン", "その他",
       "合計",
     ]);
   });
 
   it("online view groups weeks by booking month", () => {
     const r = raw();
-    r.online.set("2026-11-09", { taobao: 30 });
-    const v = buildOnline(r);
+    r.online.CN.set("2026-11-09", { taobao: 30 });
+    const v = buildOnline(r, "CN");
     expect(v.groups[0].weeks).toHaveLength(4);
     expect(v.groups[0].subtotal.taobao).toBe(30);
     expect(v.groups[0].total).toBe(30);
+  });
+
+  it("Japan online is entered in yen per character and shown in yuan on the summary", () => {
+    const r = raw();
+    r.online.JP.set("2026-11-02", { hanul: 2100, funyu: 4200 }); // 100元 + 200元
+    r.online.JP.set("2026-11-09", { hanul: 2100 });
+    const v = buildOnline(r, "JP");
+    expect(v.currency).toBe("JPY");
+    expect(v.groups[0].subtotal.hanul).toBe(4200);
+    expect(v.groups[0].total).toBe(8400);
+    expect(v.groups[0].totalCny).toBe(400);
+    const s = buildSummary(r);
+    const row = (k: string) => s.rows.find((x) => x.key === k)!;
+    expect(row("JP_ONLINE").sales["2026-11"]).toBe(400);
+    expect(row("JP_ONLINE_hanul").sales["2026-11"]).toBe(200);
+    expect(row("JP_ONLINE_mongmong").sales["2026-11"]).toBe(0);
+    expect(row("JP").sales["2026-11"]).toBe(400);
+    expect(row("CN_ONLINE").sales["2026-11"]).toBe(0);
   });
 });
 
@@ -98,7 +116,9 @@ describe("validate", () => {
     expect(() => entry("license", { country: "JP", month: "2026-11", amount: 1, character: "ふにゅ", type: "MG" })).toThrow(/ライセンシー/);
     expect(() => entry("license", { country: "JP", month: "2026-11", amount: 1, licensee: "x", character: "ふにゅ", type: "一括" })).toThrow(ValidationError);
     expect(() => entry("offline", { country: "CN", month: "2026-11", amount: 1, character: "x", type: "POP UP" })).toThrow(/お店/);
-    expect(() => entry("other", { country: "CN", month: "2026-11", amount: 1.5, content: "x" })).toThrow(/整数/);
+    expect(() => entry("other", { country: "CN", month: "2026-11", amount: 1.5, company: "x", content: "x" })).toThrow(/整数/);
+    expect(() => entry("other", { country: "CN", month: "2026-11", amount: 1, content: "x" })).toThrow(/会社名/);
+    expect(entry("other", { country: "JP", month: "2026-11", amount: 1, company: "サンプル（株）", content: "x" }).company).toBe("サンプル");
   });
 });
 

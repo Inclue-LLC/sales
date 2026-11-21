@@ -47,7 +47,7 @@ describe("invoiceToEntry", () => {
   it("always books invoices to Japan, in yuan on the summary", () => {
     const e = invoiceToEntry("a", inv({ pl: { country: "CN", kind: "other", character: "", type: "", venue: "", content: "監修料" } }))!;
     expect(e.country).toBe("JP");
-    const s = buildSummary({ settings: DEFAULT_SETTINGS, entries: [e], online: new Map(), weekOverrides: {} });
+    const s = buildSummary({ settings: DEFAULT_SETTINGS, entries: [e], online: { CN: new Map(), JP: new Map() }, weekOverrides: {} });
     // 210,000円 ÷ 21 = 10,000元
     expect(s.rows.find((r) => r.key === "JP_OTHER")!.sales["2026-12"]).toBe(10_000);
     expect(s.rows.find((r) => r.key === "JP")!.sales["2026-12"]).toBe(10_000);
@@ -59,6 +59,11 @@ describe("invoiceToEntry licensee", () => {
   it("uses the client name without the company type for licenses", () => {
     expect(invoiceToEntry("a", inv())?.licensee).toBe("サンプル");
     expect(invoiceToEntry("a", inv({ clientName: "株式会社サンプル 営業部" }), "株式会社サンプル")?.licensee).toBe("サンプル");
+  });
+  it("sets the company name for 'other' invoices", () => {
+    const x = invoiceToEntry("a", inv({ pl: { kind: "other", content: "制作費" } }));
+    expect(x?.company).toBe("サンプル");
+    expect(x?.licensee).toBeUndefined();
   });
   it("does not set a licensee for other kinds", () => {
     expect(invoiceToEntry("a", inv({ pl: { kind: "offline", character: "ふにゅ", type: "POP UP", venue: "渋谷" } }))?.licensee).toBeUndefined();

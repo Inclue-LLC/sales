@@ -8,7 +8,7 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { buildOnline, buildSummary } from "./domain/aggregate";
 import { listWeeks } from "./domain/period";
-import { CHANNELS, SHARED_LOGIN_EMAIL, toCny, type Channel, type Entry } from "./domain/types";
+import { COUNTRIES, SHARED_LOGIN_EMAIL, isChannelOf, toCny, type Country, type Entry } from "./domain/types";
 import * as V from "./domain/validate";
 import { listInvoiceEntries } from "./invoices";
 import * as repo from "./repo";
@@ -23,7 +23,11 @@ type Ctx = { uid: string; email?: string };
 type Handler = (p: Record<string, unknown>, ctx: Ctx) => Promise<unknown>;
 
 const summary = async () => buildSummary(await repo.loadRaw());
-const online = async () => buildOnline(await repo.loadRaw());
+const online = async (country: Country) => buildOnline(await repo.loadRaw(), country);
+function country(v: unknown): Country {
+  if (!COUNTRIES.includes(v as Country)) throw new V.ValidationError("国が不正です");
+  return v as Country;
+}
 
 function asArray(v: unknown): Record<string, unknown>[] {
   if (!Array.isArray(v) || v.length === 0 || v.length > 1000) throw new V.ValidationError("変更内容が不正です");
@@ -69,21 +73,22 @@ const handlers: Record<string, Handler> = {
     return { ok: true };
   },
 
-  // ---- 中国オンライン（週次） ----
-  getOnline: () => online(),
+  // ---- オンライン（週次・国ごと） ----
+  getOnline: (p) => online(country(p.country ?? "CN")),
 
-  /** changes: [{weekStart, channel, value}] */
+  /** country, changes: [{weekStart, channel, value}] */
   saveOnline: async (p, ctx) => {
+    const c0 = country(p.country ?? "CN");
     const s = await repo.getSettings();
     const weeks = new Set(listWeeks(s.startMonth, s.endMonth).map((w) => w.weekStart));
     const changes = asArray(p.changes).map((c) => {
       if (!weeks.has(c.weekStart as string)) throw new V.ValidationError("期間外の週です");
-      if (!CHANNELS.some((ch) => ch.key === c.channel)) throw new V.ValidationError("販売先が不正です");
-      return { weekStart: c.weekStart as string, channel: c.channel as Channel, value: V.amount(c.value) };
+      if (!isChannelOf(c0, c.channel)) throw new V.ValidationError("内訳が不正です");
+      return { weekStart: c.weekStart as string, channel: c.channel, value: V.amount(c.value) };
     });
-    await repo.saveOnline(changes, ctx.uid);
-    await repo.audit(ctx.uid, ctx.email, "saveOnline", { changes });
-    return online();
+    await repo.saveOnline(c0, changes, ctx.uid);
+    await repo.audit(ctx.uid, ctx.email, "saveOnline", { country: c0, changes });
+    return online(c0);
   },
 
   // ---- 設定 ----

@@ -27,5 +27,8 @@ export const otherConfig: EntryPageConfig = {
   kind: "other",
   title: "その他",
   description: "上記以外の売上を入力します（中国は元、日本は円）。計上月ごとに売上一覧の「その他」へ元で反映されます。",
-  fields: [{ key: "content", label: "案件内容", kind: "text", placeholder: "例：イラスト制作費", wide: true }],
+  fields: [
+    { key: "company", label: "会社名", kind: "text", placeholder: "例：サンプル（株式会社などは省く）" },
+    { key: "content", label: "案件内容", kind: "text", placeholder: "例：イラスト制作費", wide: true },
+  ],
 };

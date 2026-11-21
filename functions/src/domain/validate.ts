@@ -55,7 +55,11 @@ export function entry(kind: EntryKind, v: unknown): EntryInput {
       type: oneOf(o.type, OFFLINE_TYPES, "種別"),
       venue: str(o.venue, "お店・イベント名", 100, true),
     };
-  return { ...base, content: str(o.content, "案件内容", 200, true) };
+  return {
+    ...base,
+    company: stripCompanyType(str(o.company, "会社名", 100, true)),
+    content: str(o.content, "案件内容", 200, true),
+  };
 }
 
 export function kind(v: unknown): EntryKind {

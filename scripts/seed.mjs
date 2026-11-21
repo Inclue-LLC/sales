@@ -26,7 +26,7 @@ await db.doc("settings/app").set({
 });
 
 // 既存のサンプルを消してから入れ直す
-for (const col of ["entries", "onlineWeekly", "weeks"]) {
+for (const col of ["entries", "onlineWeekly", "onlineWeeklyJP", "weeks"]) {
   const snap = await db.collection(col).get();
   const b = db.batch();
   snap.docs.forEach((d) => b.delete(d.ref));
@@ -45,11 +45,15 @@ entry("license", { country: "JP", licensee: "サンプル商事", character: "�
 entry("license", { country: "JP", licensee: "サンプルトイズ", character: "スタジオハヌル", type: "MG", amount: 1_000_000, month: "2027-01" });
 entry("offline", { country: "JP", character: "ふにゅ", type: "POP UP", venue: "渋谷PARCO", amount: 850_000, month: "2026-11" });
 entry("offline", { country: "CN", character: "Lovely MongMong", type: "委託販売", venue: "上海 サンプル書店", amount: 9_000, month: "2026-12" });
-entry("other", { country: "JP", content: "イラスト制作費", amount: 150_000, month: "2026-11" });
+entry("other", { country: "JP", company: "サンプル出版", content: "イラスト制作費", amount: 150_000, month: "2026-11" });
 
 const weeks = ["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23", "2026-11-30", "2026-12-07"];
 weeks.forEach((w, i) =>
   batch.set(db.doc(`onlineWeekly/${w}`), { weekStart: w, currency: "CNY", xiaohongshu: 4_000 + i * 500, taobao: 3_000 + (i % 3) * 700 }),
+);
+// 日本オンラインは円
+weeks.slice(0, 4).forEach((w, i) =>
+  batch.set(db.doc(`onlineWeeklyJP/${w}`), { weekStart: w, currency: "JPY", hanul: 42_000 + i * 2_100, mongmong: 21_000, funyu: 10_500 * (i % 2) }),
 );
 await batch.commit();
 
